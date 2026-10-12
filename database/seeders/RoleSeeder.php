@@ -104,7 +104,7 @@ class RoleSeeder extends Seeder
             'dependants.view', 'dependants.create', 'dependants.edit',
             'withdrawals.view',
             'expenses.view', 'expenses.create', 'expenses.edit',
-            'payouts.view', 'payouts.create', 'payouts.approve', 'payouts.decline',
+            'payouts.view', 'payouts.create', 'payouts.decline',
             'payees.view', 'payees.create', 'payees.edit',
             'company-withdrawals.view', 'company-withdrawals.create',
             'wallet-transactions.view',

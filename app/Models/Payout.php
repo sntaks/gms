@@ -18,6 +18,7 @@ class Payout extends Model
 
     protected $casts = [
         'status' => PayoutStatus::class,
+        'created_by' => 'integer',
         'processed_at' => 'datetime',
     ];
 
@@ -27,7 +28,16 @@ class Payout extends Model
             if (empty($payout->idempotency_key)) {
                 $payout->idempotency_key = Str::uuid()->toString();
             }
+
+            if (empty($payout->created_by)) {
+                $payout->created_by = auth()->id();
+            }
         });
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function payee(): BelongsTo

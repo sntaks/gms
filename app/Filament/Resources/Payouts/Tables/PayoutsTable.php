@@ -26,6 +26,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -72,6 +73,10 @@ class PayoutsTable
                             ->sortable(),
                     ])->visibleFrom('md'),
                 ])->from('md'),
+                TextColumn::make('createdBy.name')
+                    ->label('Created By')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('approvedBy.name')
                     ->label('Approved By')
                     ->placeholder('—')
@@ -106,8 +111,19 @@ class PayoutsTable
                     ->requiresConfirmation()
                     ->modalHeading('Approve Payout')
                     ->modalDescription(fn (Payout $record) => 'Approve KES '.number_format($record->amount, 2)." payout to {$record->payee->name}?")
-                    ->action(fn (Payout $record) => self::approvePayout($record))
-                    ->visible(fn (Payout $record) => $record->status === PayoutStatus::Pending && auth()->user()->hasPermissionTo('payouts.approve')),
+                    ->action(function (Payout $record): void {
+                        if (! self::approvePayout($record)) {
+                            Notification::make()->title('You cannot approve this payout')->danger()->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Payout approved — queued for M-Pesa processing')
+                            ->success()
+                            ->send();
+                    })
+                    ->visible(fn (Payout $record) => $record->status === PayoutStatus::Pending && auth()->user()->can('approve', $record)),
                 Action::make('decline')
                     ->iconButton()
                     ->icon(Heroicon::OutlinedXCircle)
@@ -143,16 +159,25 @@ class PayoutsTable
                     ->requiresConfirmation()
                     ->modalHeading('Retry Failed Payout')
                     ->action(function (Payout $record): void {
-                        DB::transaction(function () use ($record): void {
+                        $requeued = DB::transaction(function () use ($record): bool {
                             $fresh = Payout::lockForUpdate()->find($record->id);
-                            if ($fresh->status !== PayoutStatus::Failed) {
-                                return;
+                            if ($fresh->status !== PayoutStatus::Failed || Gate::denies('retry', $fresh)) {
+                                return false;
                             }
                             $fresh->update(['status' => PayoutStatus::Approved]);
+
+                            return true;
                         });
+
+                        if (! $requeued) {
+                            Notification::make()->title('You cannot retry this payout')->danger()->send();
+
+                            return;
+                        }
+
                         Notification::make()->title('Payout re-queued for processing')->info()->send();
                     })
-                    ->visible(fn (Payout $record) => $record->status === PayoutStatus::Failed && auth()->user()->hasPermissionTo('payouts.approve')),
+                    ->visible(fn (Payout $record) => $record->status === PayoutStatus::Failed && auth()->user()->can('retry', $record)),
             ])
             ->toolbarActions([
                 ExportBulkAction::make()
@@ -166,18 +191,22 @@ class PayoutsTable
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn () => auth()->user()->hasPermissionTo('payouts.approve'))
+                        ->visible(fn () => auth()->user()->hasRole('super-admin') && auth()->user()->hasPermissionTo('payouts.approve'))
                         ->action(function (Collection $records): void {
                             $approved = 0;
+                            $skipped = 0;
                             foreach ($records as $record) {
-                                if ($record->status === PayoutStatus::Pending) {
-                                    self::approvePayout($record);
-                                    $approved++;
+                                if ($record->status !== PayoutStatus::Pending) {
+                                    continue;
                                 }
+
+                                self::approvePayout($record) ? $approved++ : $skipped++;
                             }
+
                             Notification::make()
                                 ->title("{$approved} payout(s) approved")
-                                ->success()
+                                ->body($skipped > 0 ? "{$skipped} skipped — you cannot approve payouts you created." : null)
+                                ->status($skipped > 0 ? 'warning' : 'success')
                                 ->send();
                         })
                         ->deselectRecordsAfterCompletion(),
@@ -234,12 +263,19 @@ class PayoutsTable
             ]);
     }
 
-    private static function approvePayout(Payout $record): void
+    /**
+     * Approve a pending payout under maker-checker rules; returns false when the current user may not approve it.
+     */
+    private static function approvePayout(Payout $record): bool
     {
-        DB::transaction(function () use ($record): void {
+        return DB::transaction(function () use ($record): bool {
             $fresh = Payout::lockForUpdate()->find($record->id);
             if ($fresh->status !== PayoutStatus::Pending) {
-                return;
+                return true;
+            }
+
+            if (Gate::denies('approve', $fresh)) {
+                return false;
             }
 
             $expense = Expense::create([
@@ -253,11 +289,8 @@ class PayoutsTable
                 'approved_by' => auth()->id(),
                 'expense_id' => $expense->id,
             ]);
-        });
 
-        Notification::make()
-            ->title('Payout approved — queued for M-Pesa processing')
-            ->success()
-            ->send();
+            return true;
+        });
     }
 }
