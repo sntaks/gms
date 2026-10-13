@@ -37,6 +37,7 @@ class ProcessPayoutsJob implements ShouldQueue
 
             if ($fresh->status !== PayoutStatus::Approved) {
                 Log::error('Payout not approved');
+
                 return;
             }
 
@@ -79,11 +80,11 @@ class ProcessPayoutsJob implements ShouldQueue
             }
         } catch (\Throwable $e) {
             $payout->update([
-                'status' => PayoutStatus::Approved,
+                'status' => PayoutStatus::Failed,
                 'response' => $e->getMessage(),
             ]);
 
-            Log::error('Payout B2C failed, reverting to approved', [
+            Log::error('Payout B2C failed, marked failed for manual review', [
                 'payout_id' => $payout->id,
                 'error' => $e->getMessage(),
             ]);

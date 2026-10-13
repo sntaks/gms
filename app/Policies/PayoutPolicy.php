@@ -33,28 +33,29 @@ class PayoutPolicy
     }
 
     /**
-     * Maker-checker: only a super-admin who did not create the payout may approve it.
-     * Payouts with an unknown maker are refused.
+     * Only super-admins may approve. Payouts within the daily cap may be self-approved by their maker;
+     * payouts over the cap need a super-admin who did not create them. Payouts with an unknown maker are refused.
      */
     public function approve(User $user, Payout $payout): bool
     {
-        return $this->isIndependentChecker($user, $payout);
+        return $this->canRelease($user, $payout);
     }
 
     /**
-     * Retrying re-releases a failed payout, so it follows the same maker-checker rule as approval.
+     * Retrying re-releases a failed payout, so it follows the same rule as approval.
      */
     public function retry(User $user, Payout $payout): bool
     {
-        return $this->isIndependentChecker($user, $payout);
+        return $this->canRelease($user, $payout);
     }
 
-    private function isIndependentChecker(User $user, Payout $payout): bool
+    private function canRelease(User $user, Payout $payout): bool
     {
-        return $user->hasRole('super-admin')
-            && $user->hasPermissionTo('payouts.approve')
-            && $payout->created_by !== null
-            && $payout->created_by !== $user->id;
+        if (! $user->hasRole('super-admin') || ! $user->hasPermissionTo('payouts.approve') || $payout->created_by === null) {
+            return false;
+        }
+
+        return ! $payout->requires_independent_approval || $payout->created_by !== $user->id;
     }
 
     public function decline(User $user, Payout $payout): bool

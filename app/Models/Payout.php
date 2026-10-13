@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PayoutStatus;
+use App\Services\PayoutDailyCap;
 use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,7 @@ class Payout extends Model
     protected $casts = [
         'status' => PayoutStatus::class,
         'created_by' => 'integer',
+        'requires_independent_approval' => 'boolean',
         'processed_at' => 'datetime',
     ];
 
@@ -32,6 +34,9 @@ class Payout extends Model
             if (empty($payout->created_by)) {
                 $payout->created_by = auth()->id();
             }
+
+            $payout->requires_independent_approval = app(PayoutDailyCap::class)
+                ->requiresIndependentApproval((float) $payout->amount);
         });
     }
 

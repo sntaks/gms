@@ -3,11 +3,14 @@
 namespace App\Filament\Resources\Payouts\Schemas;
 
 use App\Models\Payee;
+use App\Services\PayoutDailyCap;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -83,8 +86,26 @@ class PayoutForm
                         ->required()
                         ->minValue(1)
                         ->prefix('KES')
+                        ->live(debounce: 500)
                         ->suffixIcon(Heroicon::OutlinedBanknotes)
-                        ->suffixIconColor('success'),
+                        ->suffixIconColor('success')
+                        ->helperText(fn (PayoutDailyCap $dailyCap): string => 'Daily cap: KES '.number_format($dailyCap->remainingToday(), 2).' of '.number_format($dailyCap->cap(), 2).' remaining today'),
+                    Callout::make('This payout exceeds the daily cap')
+                        ->key('dailyCapWarning')
+                        ->description(function (Get $get, PayoutDailyCap $dailyCap): string {
+                            $amount = (float) $get('amount');
+                            $used = $dailyCap->usedToday();
+
+                            return 'KES '.number_format($used, 2).' of the KES '.number_format($dailyCap->cap(), 2).' daily cap is already used. '
+                                .'With this payout of KES '.number_format($amount, 2).' the total will be KES '.number_format($used + $amount, 2).', '
+                                .'so another super-admin must approve it — you will not be able to approve it yourself.';
+                        })
+                        ->warning()
+                        ->icon(Heroicon::OutlinedExclamationTriangle)
+                        ->visible(fn (Get $get, PayoutDailyCap $dailyCap): bool => is_numeric($get('amount'))
+                            && (float) $get('amount') > 0
+                            && $dailyCap->requiresIndependentApproval((float) $get('amount')))
+                        ->columnSpanFull(),
                 ])->columns(2)->columnSpan(['lg' => 3]),
             Section::make('Payout Reason')->schema([
                 Textarea::make('reason')

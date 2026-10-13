@@ -2,6 +2,7 @@
 
 use App\Enums\PayoutStatus;
 use App\Exceptions\MpesaApiException;
+use App\Jobs\ProcessPayoutsJob;
 use App\Models\Payee;
 use App\Models\Payout;
 use App\Services\MpesaService;
@@ -96,6 +97,18 @@ it('marks the payout failed when the B2C connection fails', function () {
     $this->app->instance(MpesaService::class, $mpesa);
 
     $this->artisan('payouts:process-pending')->assertFailed();
+
+    expect($payout->refresh()->status)->toBe(PayoutStatus::Failed);
+});
+
+it('marks the payout failed instead of re-queueing it when the payouts job B2C call throws', function () {
+    $payout = makePayout();
+
+    $mpesa = Mockery::mock(MpesaService::class);
+    $mpesa->shouldReceive('b2c')->once()->andThrow(new ConnectionException('timed out'));
+    $this->app->instance(MpesaService::class, $mpesa);
+
+    ProcessPayoutsJob::dispatchSync();
 
     expect($payout->refresh()->status)->toBe(PayoutStatus::Failed);
 });

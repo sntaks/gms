@@ -6,6 +6,7 @@ use App\Enums\PayoutStatus;
 use App\Models\MpesaAccountBalance;
 use App\Models\Payout;
 use App\Services\MpesaService;
+use App\Services\PayoutDailyCap;
 use Carbon\CarbonInterface;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -31,7 +32,9 @@ class PayoutStatsWidget extends BaseWidget
         $b2c = MpesaAccountBalance::latestOfType('b2c')->first();
         $stale = now()->subHours(2);
 
-
+        $dailyCap = app(PayoutDailyCap::class);
+        $capUsed = $dailyCap->usedToday();
+        $capLimit = $dailyCap->cap();
 
         $b2cBalance = Cache::remember('mpesa_b2c_balance', 300, function () {
             try {
@@ -42,6 +45,12 @@ class PayoutStatsWidget extends BaseWidget
         });
 
         return [
+            Stat::make('Daily Cap Usage', 'KES '.number_format($capUsed).' / '.number_format($capLimit))
+                ->description($capUsed > $capLimit
+                    ? 'Over cap by KES '.number_format($capUsed - $capLimit, 2).' — new payouts need a checker'
+                    : 'KES '.number_format($capLimit - $capUsed, 2).' left today before a checker is required')
+                ->descriptionIcon('heroicon-m-scale')
+                ->color($this->getCapColor($capUsed, $capLimit)),
             Stat::make('Pending Payouts', $pendingCount)
                 ->description('KES '.number_format($pendingAmount, 2).' pending')
                 ->descriptionIcon('heroicon-m-clock')
@@ -63,6 +72,15 @@ class PayoutStatsWidget extends BaseWidget
                 ->descriptionIcon('heroicon-m-banknotes')
                 ->color($this->getBalanceColor($b2c, $stale)),
         ];
+    }
+
+    private function getCapColor(float $used, float $cap): string
+    {
+        if ($cap <= 0 || $used >= $cap) {
+            return 'danger';
+        }
+
+        return $used / $cap >= 0.75 ? 'warning' : 'success';
     }
 
     private function formatLastUpdated(?CarbonInterface $date): string

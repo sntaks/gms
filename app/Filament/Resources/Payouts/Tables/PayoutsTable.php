@@ -12,11 +12,14 @@ use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ExportBulkAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Layout\Panel;
 use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
@@ -29,6 +32,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Livewire\Component;
 
 class PayoutsTable
 {
@@ -43,49 +47,115 @@ class PayoutsTable
                     Stack::make([
                         TextColumn::make('payee.name')
                             ->label('Payee')
-                            ->weight('bold')
+                            ->weight(FontWeight::Bold)
+                            ->description(fn (Payout $record): string => "#{$record->id} · {$record->payee->designation}")
                             ->searchable()
                             ->sortable(),
                         TextColumn::make('reason')
-                            ->limit(40)
-                            ->color('gray')
-                            ->size(TextSize::Small),
-                    ]),
-                    Stack::make([
-                        TextColumn::make('amount')
-                            ->prefix('KES ')
-                            ->numeric(2)
-                            ->weight('bold')
-                            ->sortable(),
-                        TextColumn::make('status')
-                            ->badge()
-                            ->sortable(),
-                    ])->visibleFrom('md'),
-                    Stack::make([
-                        TextColumn::make('payee.phone')
-                            ->label('Phone')
-                            ->color('gray'),
-                        TextColumn::make('created_at')
-                            ->label('Created')
-                            ->dateTime()
+                            ->label('Reason')
+                            ->limit(60)
+                            ->tooltip(fn (Payout $record): ?string => strlen($record->reason) > 60 ? $record->reason : null)
                             ->color('gray')
                             ->size(TextSize::Small)
+                            ->searchable(),
+                    ])->space(1)->extraAttributes(['style' => 'flex: 2 1 0%; min-width: 0;']),
+                    Stack::make([
+                        TextColumn::make('amount')
+                            ->label('Amount')
+                            ->money('KES')
+                            ->weight(FontWeight::Bold)
                             ->sortable(),
-                    ])->visibleFrom('md'),
+                        TextColumn::make('payee.phone')
+                            ->label('Phone')
+                            ->icon(Heroicon::OutlinedPhone)
+                            ->color('gray')
+                            ->size(TextSize::Small)
+                            ->searchable(),
+                    ])->space(1)->extraAttributes(['style' => 'flex: 1 1 0%; min-width: 0;']),
+                    Stack::make([
+                        TextColumn::make('created_at')
+                            ->label('Created')
+                            ->since()
+                            ->dateTimeTooltip()
+                            ->icon(Heroicon::OutlinedCalendar)
+                            ->size(TextSize::Small)
+                            ->sortable(),
+                        TextColumn::make('createdBy.name')
+                            ->label('Created By')
+                            ->prefix('by ')
+                            ->icon(Heroicon::OutlinedPencilSquare)
+                            ->placeholder('Maker unknown')
+                            ->color('gray')
+                            ->size(TextSize::Small),
+                    ])->space(1)->extraAttributes(['style' => 'flex: 1 1 0%; min-width: 0;']),
+                    Stack::make([
+                        TextColumn::make('status')
+                            ->label('Status')
+                            ->badge()
+                            ->sortable(),
+                        TextColumn::make('requires_independent_approval')
+                            ->label('Approval')
+                            ->badge()
+                            ->formatStateUsing(fn (bool $state): string => $state ? 'Needs checker' : 'Self-approvable')
+                            ->color(fn (bool $state): string => $state ? 'danger' : 'success')
+                            ->icon(fn (bool $state): Heroicon => $state ? Heroicon::OutlinedUserGroup : Heroicon::OutlinedUser)
+                            ->tooltip(fn (bool $state): string => $state
+                                ? 'Over the daily cap when created — needs a super-admin other than the maker'
+                                : 'Within the daily cap when created — the maker may approve it')
+                            ->state(fn (Payout $record): ?bool => in_array($record->status, [PayoutStatus::Pending, PayoutStatus::Failed], true)
+                                ? $record->requires_independent_approval
+                                : null),
+                    ])->space(1)->extraAttributes(['style' => 'flex: 1 1 0%; min-width: 0;']),
                 ])->from('md'),
-                TextColumn::make('createdBy.name')
-                    ->label('Created By')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('approvedBy.name')
-                    ->label('Approved By')
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('processed_at')
-                    ->label('Processed')
-                    ->dateTime()
-                    ->placeholder('—')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Panel::make([
+                    Split::make([
+                        Stack::make([
+                            TextColumn::make('full_reason')
+                                ->label('Full reason')
+                                ->state(fn (Payout $record): ?string => strlen($record->reason) > 60 ? $record->reason : null)
+                                ->icon(Heroicon::OutlinedChatBubbleBottomCenterText)
+                                ->wrap(),
+                            TextColumn::make('declined_reason')
+                                ->label('Decline reason')
+                                ->prefix('Declined: ')
+                                ->icon(Heroicon::OutlinedNoSymbol)
+                                ->color('danger')
+                                ->wrap(),
+                        ])->space(2),
+                        Stack::make([
+                            TextColumn::make('approvedBy.name')
+                                ->label('Approved By')
+                                ->prefix('Approved by: ')
+                                ->icon(Heroicon::OutlinedCheckBadge)
+                                ->color('success')
+                                ->size(TextSize::Small),
+                            TextColumn::make('declinedBy.name')
+                                ->label('Declined By')
+                                ->prefix('Declined by: ')
+                                ->icon(Heroicon::OutlinedXCircle)
+                                ->color('danger')
+                                ->size(TextSize::Small),
+                        ])->space(1),
+                        Stack::make([
+                            TextColumn::make('processed_at')
+                                ->label('Processed')
+                                ->prefix('Processed: ')
+                                ->dateTime()
+                                ->icon(Heroicon::OutlinedClock)
+                                ->placeholder('Not processed yet')
+                                ->color('gray')
+                                ->size(TextSize::Small),
+                            TextColumn::make('response')
+                                ->label('M-Pesa Response')
+                                ->prefix('M-Pesa: ')
+                                ->icon(Heroicon::OutlinedDevicePhoneMobile)
+                                ->limit(80)
+                                ->tooltip(fn (Payout $record): ?string => $record->response)
+                                ->color('gray')
+                                ->size(TextSize::Small),
+                        ])->space(1),
+                    ])->from('md'),
+                ])->collapsible(),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -103,6 +173,11 @@ class PayoutsTable
                     }),
             ])
             ->recordActions([
+                ViewAction::make()
+                    ->iconButton()
+                    ->tooltip('View Payout')
+                    ->slideOver()
+                    ->modalHeading(fn (Payout $record): string => "Payout #{$record->id} — {$record->payee->name}"),
                 Action::make('approve')
                     ->iconButton()
                     ->icon(Heroicon::OutlinedCheckCircle)
@@ -110,7 +185,9 @@ class PayoutsTable
                     ->tooltip('Approve Payout')
                     ->requiresConfirmation()
                     ->modalHeading('Approve Payout')
-                    ->modalDescription(fn (Payout $record) => 'Approve KES '.number_format($record->amount, 2)." payout to {$record->payee->name}?")
+                    ->modalDescription(fn (Payout $record) => 'Approve KES '.number_format($record->amount, 2)." payout to {$record->payee->name}?"
+                        .($record->created_by === auth()->id() ? ' You created this payout; it is within the daily cap, so you may approve it yourself.' : ''))
+                    ->after(fn (Component $livewire) => $livewire->dispatch('refresh-sidebar'))
                     ->action(function (Payout $record): void {
                         if (! self::approvePayout($record)) {
                             Notification::make()->title('You cannot approve this payout')->danger()->send();
@@ -150,7 +227,53 @@ class PayoutsTable
                         });
                         Notification::make()->title('Payout declined')->warning()->send();
                     })
+                    ->after(fn (Component $livewire) => $livewire->dispatch('refresh-sidebar'))
                     ->visible(fn (Payout $record) => $record->status === PayoutStatus::Pending && auth()->user()->hasPermissionTo('payouts.decline')),
+                Action::make('decline_failed')
+                    ->label('Decline failed payout')
+                    ->iconButton()
+                    ->icon(Heroicon::OutlinedNoSymbol)
+                    ->color('danger')
+                    ->tooltip('Decline Failed Payout')
+                    ->modalHeading('Decline Failed Payout')
+                    ->modalDescription('The payout will not be retried, and the expense booked when it was approved will be removed.')
+                    ->modalSubmitActionLabel('Decline Payout')
+                    ->schema([
+                        Textarea::make('declined_reason')
+                            ->label('Reason for declining')
+                            ->required()
+                            ->rows(3),
+                    ])
+                    ->action(function (Payout $record, array $data): void {
+                        $declined = DB::transaction(function () use ($record, $data): bool {
+                            $fresh = Payout::lockForUpdate()->find($record->id);
+                            if ($fresh->status !== PayoutStatus::Failed) {
+                                return false;
+                            }
+
+                            $expense = $fresh->expense;
+
+                            $fresh->update([
+                                'status' => PayoutStatus::Declined,
+                                'declined_by' => auth()->id(),
+                                'declined_reason' => $data['declined_reason'],
+                                'expense_id' => null,
+                            ]);
+
+                            $expense?->delete();
+
+                            return true;
+                        });
+
+                        if (! $declined) {
+                            Notification::make()->title('Only failed payouts can be declined here')->danger()->send();
+
+                            return;
+                        }
+
+                        Notification::make()->title('Failed payout declined')->warning()->send();
+                    })
+                    ->visible(fn (Payout $record) => $record->status === PayoutStatus::Failed && auth()->user()->can('decline', $record)),
                 Action::make('retry')
                     ->iconButton()
                     ->icon(Heroicon::OutlinedArrowPath)
@@ -205,10 +328,11 @@ class PayoutsTable
 
                             Notification::make()
                                 ->title("{$approved} payout(s) approved")
-                                ->body($skipped > 0 ? "{$skipped} skipped — you cannot approve payouts you created." : null)
+                                ->body($skipped > 0 ? "{$skipped} skipped — payouts you created over the daily cap need another super-admin." : null)
                                 ->status($skipped > 0 ? 'warning' : 'success')
                                 ->send();
                         })
+                        ->after(fn (Component $livewire) => $livewire->dispatch('refresh-sidebar'))
                         ->deselectRecordsAfterCompletion(),
                     BulkAction::make('bulk_decline')
                         ->label('Decline Selected')
@@ -242,6 +366,7 @@ class PayoutsTable
                             }
                             Notification::make()->title("{$count} payout(s) declined")->warning()->send();
                         })
+                        ->after(fn (Component $livewire) => $livewire->dispatch('refresh-sidebar'))
                         ->deselectRecordsAfterCompletion(),
                     DeleteBulkAction::make()
                         ->before(function (Collection $records): void {

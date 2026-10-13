@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\Payouts;
 
+use App\Enums\PayoutStatus;
 use App\Filament\Resources\Payouts\Pages\CreatePayout;
 use App\Filament\Resources\Payouts\Pages\ListPayouts;
 use App\Filament\Resources\Payouts\Schemas\PayoutForm;
+use App\Filament\Resources\Payouts\Schemas\PayoutInfolist;
 use App\Filament\Resources\Payouts\Tables\PayoutsTable;
 use App\Models\Payout;
 use BackedEnum;
@@ -28,9 +30,31 @@ class PayoutResource extends Resource
         return PayoutForm::configure($schema);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return PayoutInfolist::configure($schema);
+    }
+
     public static function table(Table $table): Table
     {
         return PayoutsTable::configure($table);
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $pending = static::getModel()::where('status', PayoutStatus::Pending)->count();
+
+        return $pending ? number_format($pending) : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'danger';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Payouts pending approval';
     }
 
     public static function getRelations(): array

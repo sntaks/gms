@@ -25,7 +25,7 @@ beforeEach(function (): void {
 /**
  * @param  array<string, mixed>  $attributes
  */
-function makePayout(User $maker, array $attributes = []): Payout
+function makeCheckerPayout(User $maker, array $attributes = []): Payout
 {
     test()->actingAs($maker);
 
@@ -38,20 +38,20 @@ function makePayout(User $maker, array $attributes = []): Payout
 }
 
 it('records the logged-in user as the payout maker', function (): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
 
     expect($payout->created_by)->toBe($this->maker->id);
 });
 
 it('hides approve from the maker of the payout', function (): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
 
     Livewire::test(ListPayouts::class)
         ->assertActionHidden(TestAction::make('approve')->table($payout));
 });
 
 it('lets a different super-admin approve the payout', function (): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
     $this->actingAs($this->checker);
 
     Livewire::test(ListPayouts::class)
@@ -63,7 +63,7 @@ it('lets a different super-admin approve the payout', function (): void {
 });
 
 it('does not let admins or managers approve payouts', function (string $role): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
     $user = User::factory()->create(['status' => UserStatus::Active->value]);
     $user->assignRole($role);
     $this->actingAs($user);
@@ -75,8 +75,8 @@ it('does not let admins or managers approve payouts', function (string $role): v
 })->with(['admin', 'manager']);
 
 it('skips the makers own payouts when bulk approving', function (): void {
-    $own = makePayout($this->maker);
-    $other = makePayout($this->checker);
+    $own = makeCheckerPayout($this->maker);
+    $other = makeCheckerPayout($this->checker);
     $this->actingAs($this->maker);
 
     Livewire::test(ListPayouts::class)
@@ -90,7 +90,7 @@ it('skips the makers own payouts when bulk approving', function (): void {
 });
 
 it('applies maker-checker to retrying a failed payout', function (): void {
-    $payout = makePayout($this->maker, ['status' => PayoutStatus::Failed]);
+    $payout = makeCheckerPayout($this->maker, ['status' => PayoutStatus::Failed]);
 
     Livewire::test(ListPayouts::class)
         ->assertActionHidden(TestAction::make('retry')->table($payout));
@@ -104,14 +104,14 @@ it('applies maker-checker to retrying a failed payout', function (): void {
 });
 
 it('refuses approval when the payout maker is unknown', function (): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
     $payout->updateQuietly(['created_by' => null]);
 
     expect($this->checker->can('approve', $payout->fresh()))->toBeFalse();
 });
 
 it('still lets the maker decline their own payout', function (): void {
-    $payout = makePayout($this->maker);
+    $payout = makeCheckerPayout($this->maker);
 
     Livewire::test(ListPayouts::class)
         ->callAction(TestAction::make('decline')->table($payout), data: ['declined_reason' => 'Raised in error'])
