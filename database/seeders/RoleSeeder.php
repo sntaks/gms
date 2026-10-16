@@ -27,6 +27,10 @@ class RoleSeeder extends Seeder
             // Promotions
             'promo-codes.manage',
 
+            // Bet Shops
+            'bet-shops.view',
+            'bet-shops.manage',
+
             // Shareholders
             'holders.view',
             'holders.create',
@@ -110,6 +114,7 @@ class RoleSeeder extends Seeder
             'wallet-transactions.view',
             'income-distributions.view',
             'deposits.view',
+            'bet-shops.view',
             'game-results.view', 'jackpot-results.view', 'tournament-results.view',
             'reports.view',
         ];
