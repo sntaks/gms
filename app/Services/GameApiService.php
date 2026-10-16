@@ -110,9 +110,12 @@ class GameApiService
             $apiMessage = $decoded['message'] ?? $decoded['error'] ?? $decoded['status'] ?? '';
             $statusCode = $response->status();
 
+            $retryAfter = null;
+
             if ($statusCode === 429) {
-                $retryAfter = $response->header('Retry-After');
-                $apiMessage = 'Rate limit reached. Please retry shortly'.($retryAfter !== '' ? " (in {$retryAfter}s)." : '.');
+                $retryAfterHeader = $response->header('Retry-After');
+                $retryAfter = is_numeric($retryAfterHeader) ? (int) $retryAfterHeader : null;
+                $apiMessage = 'Rate limit reached. Please retry shortly'.($retryAfterHeader !== '' ? " (in {$retryAfterHeader}s)." : '.');
             }
 
             Log::error('GameAPI request failed', [
@@ -129,6 +132,7 @@ class GameApiService
                 is_array($decoded['errors'] ?? null) ? $decoded['errors'] : [],
                 is_string($decoded['code'] ?? null) ? $decoded['code'] : null,
                 is_array($decoded) ? $decoded : [],
+                $retryAfter,
             );
         }
 
@@ -984,7 +988,7 @@ class GameApiService
         'ledger', 'deposits', 'withdrawals', 'purchases', 'adjustments', 'games', 'competitions',
         'customers-top', 'cash-flow', 'income-statement', 'trial-balance', 'expenses', 'taxes',
         'excise-duty', 'excise-duty-charges', 'excise-duty-returns', 'excise-duty-remittances', 'disputes',
-        'referral-bonuses', 'referral-withdrawals', 'promotions',
+        'referral-bonuses', 'referral-withdrawals', 'promotions', 'bet-shops', 'bet-shop-loads', 'bet-shop-withdrawals',
     ];
 
     /**
@@ -1093,7 +1097,8 @@ class GameApiService
     }
 
     /**
-     * The 16 ledger / wallet / payment reconciliation controls.
+     * The ledger, wallet, payment, excise duty and bet shop reconciliation controls. KadiApi adds
+     * checks over time, so callers never assume how many there are.
      *
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>

@@ -10,15 +10,17 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 
 /**
- * One row per excise duty charge, from a deposit or a signup bonus (`source`),
- * with whether the duty was reversed on a refund or already remitted to KRA.
- * Promotion charges have no deposit, M-Pesa code or payer number.
+ * One row per excise duty charge, from a deposit, a signup bonus or a cash load at
+ * a bet shop (`source`), with whether the duty was reversed or already remitted to
+ * KRA. Only deposit charges have an M-Pesa code and payer number; a shop load charge
+ * links to its load.
  */
 class ExciseChargesReport extends FinanceListReportPage
 {
     public const SOURCES = [
         'deposit' => 'Deposit',
         'promotion' => 'Signup bonus',
+        'shop_load' => 'Shop load',
     ];
 
     public const STATUSES = [
@@ -60,7 +62,7 @@ class ExciseChargesReport extends FinanceListReportPage
         $unremitted = $summary['unremitted'] ?? [];
 
         return [
-            ['label' => 'Excise Charged', 'value' => Format::money($summary['excise'] ?? 0), 'description' => number_format((int) ($summary['charges'] ?? 0)).' charges on deposits and signup bonuses', 'icon' => 'heroicon-m-receipt-percent', 'color' => 'info'],
+            ['label' => 'Excise Charged', 'value' => Format::money($summary['excise'] ?? 0), 'description' => number_format((int) ($summary['charges'] ?? 0)).' charges on deposits, signup bonuses and shop loads', 'icon' => 'heroicon-m-receipt-percent', 'color' => 'info'],
             ['label' => 'Gross Deposits', 'value' => Format::money($summary['gross_deposits'] ?? 0), 'icon' => 'heroicon-m-banknotes', 'color' => 'primary'],
             ['label' => 'Unremitted', 'value' => Format::money($unremitted['excise'] ?? 0), 'description' => number_format((int) ($unremitted['charges'] ?? 0)).' charges not yet paid to KRA', 'icon' => 'heroicon-m-clock', 'color' => ($unremitted['excise'] ?? 0) > 0 ? 'warning' : 'success'],
         ];
@@ -94,8 +96,14 @@ class ExciseChargesReport extends FinanceListReportPage
                 ->formatStateUsing(fn ($state): string => Format::dateTime($state)),
             TextColumn::make('source')
                 ->badge()
-                ->color(fn (?string $state): string => $state === 'promotion' ? 'warning' : 'gray')
-                ->formatStateUsing(fn (?string $state): string => self::SOURCES[$state] ?? ucfirst((string) ($state ?? 'deposit'))),
+                ->color(fn (?string $state): string => match ($state) {
+                    'promotion' => 'warning',
+                    'shop_load' => 'info',
+                    default => 'gray',
+                })
+                ->formatStateUsing(fn (?string $state): string => self::SOURCES[$state] ?? ucfirst((string) ($state ?? 'deposit')))
+                ->description(fn (array $record): ?string => ($record['source'] ?? null) === 'shop_load' && filled($record['bet_shop_load_id'] ?? null) ? 'Load #'.$record['bet_shop_load_id'] : null)
+                ->url(fn (array $record): ?string => ($record['source'] ?? null) === 'shop_load' ? BetShopLoadsReport::loadUrl($record['bet_shop_load_id'] ?? null) : null),
             TextColumn::make('trans_id')
                 ->label('M-Pesa Code')
                 ->fontFamily('mono')

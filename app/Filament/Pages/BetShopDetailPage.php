@@ -258,6 +258,14 @@ class BetShopDetailPage extends Page
                                     ->view('infolists.bet-shop-withdrawals-tab')
                                     ->viewData(['shopId' => (int) $this->shop]),
                             ]),
+                        Tab::make('Report')
+                            ->visible(fn (): bool => FinanceReportPage::canAccess())
+                            ->schema([
+                                ViewEntry::make('report')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-report-tab')
+                                    ->viewData(['shopId' => (int) $this->shop]),
+                            ]),
                     ]),
             ]);
     }
