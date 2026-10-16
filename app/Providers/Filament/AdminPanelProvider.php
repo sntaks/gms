@@ -57,7 +57,7 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarCollapsibleOnDesktop()
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,
-                fn (): View => view('filament.hooks.report-menu-styles'),
+                fn (): View => view('filament.hooks.report-styles'),
             )
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,
