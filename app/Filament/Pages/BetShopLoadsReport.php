@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Livewire\ShopLoadsTable;
 use App\Services\GameApiService;
 use App\Support\Format;
@@ -11,6 +12,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Support\Str;
+use UnitEnum;
 
 /**
  * Every cash load at a bet shop in the period, from `/finance/bet-shops/loads`, with
@@ -24,6 +26,8 @@ class BetShopLoadsReport extends FinanceListReportPage
     protected static ?string $navigationLabel = 'Bet Shop Loads';
 
     protected static ?int $navigationSort = 31;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::BET_SHOPS;
 
     protected ?string $heading = 'Bet Shop Loads';
 

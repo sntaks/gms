@@ -2,11 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Livewire\ShopLoadsTable;
 use App\Support\Format;
 use BackedEnum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use UnitEnum;
 
 /**
  * One row per bet shop from `/finance/bet-shops`: float bought and paid back, cash
@@ -23,6 +25,8 @@ class BetShopsReport extends FinanceListReportPage
     protected static ?string $navigationLabel = 'Bet Shops';
 
     protected static ?int $navigationSort = 30;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::BET_SHOPS;
 
     protected ?string $heading = 'Bet Shops';
 

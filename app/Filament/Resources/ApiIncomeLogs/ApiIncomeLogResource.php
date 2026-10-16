@@ -18,7 +18,7 @@ class ApiIncomeLogResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServer;
 
-    protected static string|UnitEnum|null $navigationGroup = '📊 Financial';
+    protected static string|UnitEnum|null $navigationGroup = '🤝 Shareholders';
 
     protected static ?int $navigationSort = 6;
 

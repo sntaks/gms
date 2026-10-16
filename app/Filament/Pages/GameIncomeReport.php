@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\GameReports\GameReportsCluster;
 use App\Filament\Pages\Widgets\IncomeSummaryWidget;
 use App\Services\GameApiService;
 use App\Support\Format;
@@ -11,7 +12,6 @@ use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use UnitEnum;
 
 class GameIncomeReport extends BaseReportPage
 {
@@ -19,7 +19,7 @@ class GameIncomeReport extends BaseReportPage
 
     protected static ?string $navigationLabel = 'Income Report';
 
-    protected static string|UnitEnum|null $navigationGroup = '📈 Reports';
+    protected static ?string $cluster = GameReportsCluster::class;
 
     protected static ?int $navigationSort = 0;
 

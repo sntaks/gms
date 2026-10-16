@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
+use UnitEnum;
 
 /**
  * Excise duty charged on plain M-Pesa deposits, what was reversed and remitted
@@ -15,7 +17,9 @@ class ExciseDutyReport extends FinanceReportPage
 
     protected static ?string $navigationLabel = 'Excise Duty';
 
-    protected static ?int $navigationSort = 16;
+    protected static ?int $navigationSort = 15;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::TAX;
 
     protected ?string $heading = 'Excise Duty';
 

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Livewire\ShopLoadsTable;
 use App\Livewire\ShopWithdrawalsTable;
 use App\Support\Format;
@@ -11,6 +12,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Support\Str;
+use UnitEnum;
 
 /**
  * Every bet shop cash withdrawal asked for in the period, from
@@ -25,6 +27,8 @@ class BetShopWithdrawalsReport extends FinanceListReportPage
     protected static ?string $navigationLabel = 'Bet Shop Withdrawals';
 
     protected static ?int $navigationSort = 32;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::BET_SHOPS;
 
     protected ?string $heading = 'Bet Shop Withdrawals';
 

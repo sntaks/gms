@@ -18,7 +18,7 @@ class WalletTransactionResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedReceiptPercent;
 
-    protected static string|UnitEnum|null $navigationGroup = '📊 Financial';
+    protected static string|UnitEnum|null $navigationGroup = '🤝 Shareholders';
 
     protected static ?int $navigationSort = 5;
 

@@ -2,11 +2,13 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
+use UnitEnum;
 
 /**
  * Signup bonuses granted in the period, from `/finance/promotions`. The house
@@ -25,6 +27,8 @@ class SignupBonusesReport extends FinanceListReportPage
     protected static ?string $navigationLabel = 'Signup Bonuses';
 
     protected static ?int $navigationSort = 29;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::PROMOTIONS;
 
     protected ?string $heading = 'Signup Bonuses';
 

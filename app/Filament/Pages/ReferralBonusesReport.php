@@ -2,12 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use UnitEnum;
 
 /**
  * Referral bonuses credited to referrers' referral wallets, from
@@ -21,6 +23,8 @@ class ReferralBonusesReport extends FinanceListReportPage
     protected static ?string $navigationLabel = 'Referral Bonuses';
 
     protected static ?int $navigationSort = 27;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::PROMOTIONS;
 
     protected ?string $heading = 'Referral Bonuses';
 
