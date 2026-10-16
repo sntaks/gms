@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Concerns\HandlesBetShopWrites;
 use App\Exceptions\GameApiException;
 use App\Livewire\BetShopKeysTable;
+use App\Livewire\ShopFloatPurchasesTable;
 use App\Services\GameApiService;
 use App\Support\Format;
 use Closure;
@@ -25,6 +26,7 @@ use Filament\Support\Enums\TextSize;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -48,6 +50,8 @@ class BetShopDetailPage extends Page
     public const SUSPEND_WARNING = 'The shop\'s keys stop working until it is reactivated. Its float is kept, and float it buys can still be credited.';
 
     public const REFRESH_EVENT = 'bet-shop-changed';
+
+    public const REDEMPTION_WARNING = 'Record this only after the owner has been paid. Pay the owner outside the GMS first (M-Pesa org portal B2C or bank); recording it takes the amount off the shop\'s float.';
 
     protected static bool $shouldRegisterNavigation = false;
 
@@ -114,6 +118,7 @@ class BetShopDetailPage extends Page
         $this->refreshShop();
 
         $this->dispatch(BetShopKeysTable::REFRESH_EVENT);
+        $this->dispatch(ShopFloatPurchasesTable::REFRESH_EVENT);
     }
 
     /**
@@ -150,6 +155,7 @@ class BetShopDetailPage extends Page
     {
         return [
             $this->issueKeyAction(),
+            $this->recordRedemptionAction(),
             $this->editShopAction(),
             $this->suspendShopAction(),
             $this->activateShopAction(),
@@ -222,6 +228,20 @@ class BetShopDetailPage extends Page
                                 ViewEntry::make('keys')
                                     ->hiddenLabel()
                                     ->view('infolists.bet-shop-keys-tab')
+                                    ->viewData(['shopId' => (int) $this->shop]),
+                            ]),
+                        Tab::make('Float purchases')
+                            ->schema([
+                                ViewEntry::make('float_purchases')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-float-purchases-tab')
+                                    ->viewData(['shopId' => (int) $this->shop, 'shopNo' => (string) ($this->details['shop_no'] ?? '')]),
+                            ]),
+                        Tab::make('Float redemptions')
+                            ->schema([
+                                ViewEntry::make('float_redemptions')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-float-redemptions-tab')
                                     ->viewData(['shopId' => (int) $this->shop]),
                             ]),
                     ]),
@@ -341,6 +361,106 @@ class BetShopDetailPage extends Page
                     ->validationMessages(['accepted' => 'Confirm that closing is final.']),
             ])
             ->action(fn (array $data, Action $action) => $this->runStatusChange('close', $data, $action));
+    }
+
+    /**
+     * Record float already paid back to the owner outside the API. KadiApi only records it:
+     * no money is sent from the GMS.
+     */
+    protected function recordRedemptionAction(): Action
+    {
+        return Action::make('recordRedemption')
+            ->label('Record redemption')
+            ->icon('heroicon-o-banknotes')
+            ->color('gray')
+            ->visible(fn (): bool => static::canManageShopFloat() && ! $this->apiError && ! $this->isClosed())
+            ->disabled(fn (): bool => ! $this->hasFloat())
+            ->tooltip(fn (): ?string => $this->hasFloat() ? null : 'The float is empty.')
+            ->modalHeading(fn (): string => 'Record float paid back to the owner of '.($this->details['shop_no'] ?? 'the shop'))
+            ->modalDescription(self::REDEMPTION_WARNING)
+            ->modalIcon('heroicon-o-exclamation-triangle')
+            ->modalIconColor('warning')
+            ->modalSubmitActionLabel('Record redemption')
+            ->fillForm(fn (): array => ['idempotency_key' => Str::uuid()->toString()])
+            ->schema([
+                Hidden::make('idempotency_key'),
+                TextEntry::make('float_now')
+                    ->label('Float now')
+                    ->state(fn (): string => Format::money($this->details['float_balance'] ?? 0)),
+                TextInput::make('amount')
+                    ->label('Amount paid to the owner')
+                    ->prefix('KES')
+                    ->numeric()
+                    ->required()
+                    ->minValue(1)
+                    ->maxValue(fn (): float => (float) ($this->details['float_balance'] ?? 0))
+                    ->regex('/^\d+(\.\d{1,2})?$/')
+                    ->validationMessages(['regex' => 'Use at most 2 decimal places.']),
+                TextInput::make('payment_reference')
+                    ->label('Payment reference')
+                    ->helperText('The M-Pesa receipt or bank reference of the payment to the owner.')
+                    ->required()
+                    ->maxLength(100)
+                    ->dehydrateStateUsing(fn (?string $state): ?string => $state === null ? null : strtoupper(trim($state))),
+                Textarea::make('note')
+                    ->label('Why was it paid back?')
+                    ->placeholder('Owner asked for float back')
+                    ->required()
+                    ->minLength(3)
+                    ->maxLength(255)
+                    ->rows(2),
+                Checkbox::make('confirm_paid')
+                    ->label('The owner has already been paid this amount.')
+                    ->accepted()
+                    ->validationMessages(['accepted' => 'Record a redemption only after the owner has been paid.']),
+            ])
+            ->action(function (array $data, Action $action): void {
+                abort_unless(static::canManageShopFloat(), 403);
+
+                $shopId = (int) $this->shop;
+                $payload = [
+                    'amount' => round((float) $data['amount'], 2),
+                    'payment_reference' => $data['payment_reference'],
+                    'note' => trim($data['note']),
+                    'idempotency_key' => $data['idempotency_key'],
+                ];
+
+                try {
+                    $result = app(GameApiService::class)->recordShopFloatRedemption($shopId, $payload['amount'], $payload['payment_reference'], $payload['note'], $data['idempotency_key']);
+                } catch (GameApiException $e) {
+                    static::recordBetShopWrite('ShopFloatRedemption', 0, 'record_failed', [...$payload, 'bet_shop_id' => $shopId], $e->statusCode, [...static::betShopErrorResponse($e), 'float_balance' => $e->body['float_balance'] ?? null]);
+
+                    // The float holds less than the amount: show it on the field so it can be corrected.
+                    if ($e->errorCode === 'insufficient_float') {
+                        $this->refreshShop();
+                        $this->mountedActions[$action->getNestingIndex()]['data']['idempotency_key'] = Str::uuid()->toString();
+
+                        throw ValidationException::withMessages([
+                            "mountedActions.{$action->getNestingIndex()}.data.amount" => static::betShopRefusalMessage($e),
+                        ]);
+                    }
+
+                    $this->handleBetShopWriteFailure($e, $action, 'Could not record the redemption', [
+                        'amount' => 'amount',
+                        'payment_reference' => 'payment_reference',
+                        'note' => 'note',
+                    ]);
+
+                    return;
+                }
+
+                $redemption = $result['redemption'];
+
+                static::recordBetShopWrite('ShopFloatRedemption', (int) ($redemption['id'] ?? 0), 'recorded', [...$payload, 'bet_shop_id' => $shopId], 201, [...$redemption, 'float_balance' => $result['float_balance']]);
+
+                Notification::make()
+                    ->title('Redemption of '.Format::money($payload['amount']).' recorded')
+                    ->body($result['float_balance'] !== null ? 'The float now holds '.Format::money($result['float_balance']).'.' : null)
+                    ->success()
+                    ->send();
+
+                $this->afterBetShopWrite();
+            });
     }
 
     protected static function reasonField(string $label): Textarea

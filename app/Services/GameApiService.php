@@ -1569,6 +1569,8 @@ class GameApiService
      */
     public const BET_SHOP_FIELDS = ['shop_no', 'name', 'owner_name', 'owner_phone', 'location', 'notes'];
 
+    public const BET_SHOP_OPTIONS_CACHE_KEY = 'game_api:bet-shops:options';
+
     /**
      * One page of bet shops, ordered by shop number, each with its float balance and active keys.
      * Endpoint: GET /api/v1/bet-shops
@@ -1610,7 +1612,11 @@ class GameApiService
     {
         $body = $this->withoutBlankFilters(collect($data)->only(self::BET_SHOP_FIELDS)->all());
 
-        return $this->makeRequest('POST', '/bet-shops', $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+        $shop = $this->makeRequest('POST', '/bet-shops', $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        Cache::forget(self::BET_SHOP_OPTIONS_CACHE_KEY);
+
+        return $shop;
     }
 
     /**
@@ -1627,7 +1633,11 @@ class GameApiService
         $enc = $this->encryptId($shopId);
         $body = collect($data)->only(array_values(array_diff(self::BET_SHOP_FIELDS, ['shop_no'])))->all();
 
-        return $this->makeRequest('PUT', "/bet-shops/{$enc}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+        $shop = $this->makeRequest('PUT', "/bet-shops/{$enc}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        Cache::forget(self::BET_SHOP_OPTIONS_CACHE_KEY);
+
+        return $shop;
     }
 
     /**
@@ -1678,7 +1688,11 @@ class GameApiService
     {
         $enc = $this->encryptId($shopId);
 
-        return $this->makeRequest('POST', "/bet-shops/{$enc}/{$change}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+        $shop = $this->makeRequest('POST', "/bet-shops/{$enc}/{$change}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        Cache::forget(self::BET_SHOP_OPTIONS_CACHE_KEY);
+
+        return $shop;
     }
 
     /**
@@ -1726,6 +1740,159 @@ class GameApiService
         $enc = $this->encryptId($keyId);
 
         return $this->makeRequest('POST', "/bet-shop-keys/{$enc}/revoke", timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+    }
+
+    /**
+     * Every shop (id, shop_no, name, status), ordered by shop number, for choosing a shop in a
+     * form. Cached for a minute and dropped whenever the GMS changes a shop.
+     *
+     * @return list<array{id: int, shop_no: string, name: string, status: string}>
+     */
+    public function betShopOptions(): array
+    {
+        return Cache::remember(self::BET_SHOP_OPTIONS_CACHE_KEY, 60, function (): array {
+            $shops = [];
+            $page = 1;
+
+            do {
+                $data = $this->listBetShops(['page' => $page, 'per_page' => 200]);
+
+                foreach ($data['items'] ?? [] as $shop) {
+                    if (is_array($shop) && isset($shop['id'], $shop['shop_no'])) {
+                        $shops[] = [
+                            'id' => (int) $shop['id'],
+                            'shop_no' => (string) $shop['shop_no'],
+                            'name' => (string) ($shop['name'] ?? ''),
+                            'status' => (string) ($shop['status'] ?? ''),
+                        ];
+                    }
+                }
+
+                $lastPage = (int) ($data['pagination']['last_page'] ?? 1);
+            } while ($page++ < min($lastPage, 10));
+
+            return $shops;
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Bet shop float — credited from the paybill, paid back to owners
+    // -------------------------------------------------------------------------
+
+    /**
+     * Credit an unmatched paybill deposit (an owner buying float with bill ref SHOP-<shop_no>)
+     * to a shop's float in full: no excise duty, no referral. The caller owns the Idempotency-Key.
+     * Endpoint: POST /api/v1/deposits/{enc}/shop-float  (rate limited: 30/min)
+     *
+     * @return array{float_purchase?: array<string, mixed>, deposit?: array<string, mixed>}
+     *
+     * @throws GameApiException 404 deposit_not_found, 409 already_resolved or shop_closed, 422 errors.shop_no
+     */
+    public function creditDepositToShopFloat(int $depositId, string $shopNo, string $note, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($depositId);
+
+        $result = $this->makeRequest('POST', "/deposits/{$enc}/shop-float", [
+            'shop_no' => $shopNo,
+            'note' => $note,
+        ], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetDepositCaches();
+
+        return $result;
+    }
+
+    /**
+     * One page of a shop's float purchases, newest first, voided ones included.
+     * Endpoint: GET /api/v1/bet-shops/{enc}/float-purchases
+     *
+     * @param  array<string, mixed>  $filters  page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listShopFloatPurchases(int $shopId, array $filters = []): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('GET', "/bet-shops/{$enc}/float-purchases", query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * Take a float purchase back out of the shop's float and put its deposit back to unmatched.
+     * Endpoint: POST /api/v1/bet-shops/float-purchases/{enc}/void  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The voided float purchase.
+     *
+     * @throws GameApiException 409 insufficient_float (with `float_balance`) or already_resolved
+     */
+    public function voidShopFloatPurchase(int $floatPurchaseId, string $reason, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($floatPurchaseId);
+
+        $result = $this->makeRequest('POST', "/bet-shops/float-purchases/{$enc}/void", ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetDepositCaches();
+
+        return $result['float_purchase'] ?? $result;
+    }
+
+    /**
+     * Record float paid back to the owner outside the API (M-Pesa B2C or bank). The float goes
+     * down by the amount.
+     * Endpoint: POST /api/v1/bet-shops/{enc}/float-redemptions  (rate limited: 30/min)
+     *
+     * @return array{redemption: array<string, mixed>, float_balance: float|null}
+     *
+     * @throws GameApiException 409 insufficient_float (with `float_balance`), 422 validation
+     */
+    public function recordShopFloatRedemption(int $shopId, float $amount, string $paymentReference, string $note, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        $response = $this->makeRequest('POST', "/bet-shops/{$enc}/float-redemptions", [
+            'amount' => $amount,
+            'payment_reference' => $paymentReference,
+            'note' => $note,
+        ], timeout: 30, idempotencyKey: $idempotencyKey);
+
+        $this->forgetFinanceReports();
+
+        return [
+            'redemption' => $response['data'] ?? [],
+            'float_balance' => isset($response['float_balance']) ? (float) $response['float_balance'] : null,
+        ];
+    }
+
+    /**
+     * One page of a shop's float redemptions, newest first, voided ones included.
+     * Endpoint: GET /api/v1/bet-shops/{enc}/float-redemptions
+     *
+     * @param  array<string, mixed>  $filters  page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listShopFloatRedemptions(int $shopId, array $filters = []): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('GET', "/bet-shops/{$enc}/float-redemptions", query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * Void a redemption recorded by mistake; the amount goes back on the float.
+     * Endpoint: POST /api/v1/bet-shops/float-redemptions/{enc}/void  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The voided redemption.
+     *
+     * @throws GameApiException 409 already_resolved
+     */
+    public function voidShopFloatRedemption(int $redemptionId, string $reason, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($redemptionId);
+
+        $redemption = $this->makeRequest('POST', "/bet-shops/float-redemptions/{$enc}/void", ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $redemption;
     }
 
     // -------------------------------------------------------------------------

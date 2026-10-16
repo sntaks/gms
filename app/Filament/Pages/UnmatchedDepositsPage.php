@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Concerns\CreditsDepositsToShopFloat;
+use App\Concerns\HandlesBetShopWrites;
 use App\Concerns\ResolvesUnmatchedDeposits;
 use App\Filament\Widgets\UnmatchedDepositsWidget;
 use App\Models\AuditLog;
@@ -28,10 +30,14 @@ use UnitEnum;
  * The unmatched-deposit work queue from KadiApi's `GET /deposits/unmatched`:
  * M-Pesa payments whose bill ref matched no customer, so nobody was credited.
  * Unmatched deposits are listed oldest first with KadiApi's suggested
- * customers; the Assigned and Refunded tabs show how each was resolved.
+ * customers; the Assigned, Refunded and Shop float tabs show how each was
+ * resolved. Payments a bet shop owner made to buy float (bill ref
+ * `SHOP-<shop_no>`) are badged and can be credited to the shop's float.
  */
 class UnmatchedDepositsPage extends Page implements HasTable
 {
+    use CreditsDepositsToShopFloat;
+    use HandlesBetShopWrites;
     use InteractsWithTable;
     use ResolvesUnmatchedDeposits;
 
@@ -39,6 +45,7 @@ class UnmatchedDepositsPage extends Page implements HasTable
         'unmatched' => 'Unmatched',
         'assigned' => 'Assigned',
         'refunded' => 'Refunded',
+        'shop_float' => 'Shop float',
     ];
 
     /**
@@ -146,6 +153,17 @@ class UnmatchedDepositsPage extends Page implements HasTable
                     ->description(fn (array $record): ?string => filled($record['msisdn'] ?? null) ? Format::payerPhone($record['msisdn']) : null),
 
                 // Unmatched tab
+                TextColumn::make('bet_shop')
+                    ->label('Shop float')
+                    ->state(fn (array $record): ?string => is_array($record['bet_shop'] ?? null) ? 'Shop float · '.($record['bet_shop']['shop_no'] ?? '') : null)
+                    ->badge()
+                    ->color(fn (array $record): string => ($record['bet_shop']['status'] ?? null) === 'closed' ? 'gray' : 'info')
+                    ->icon('heroicon-m-building-storefront')
+                    ->tooltip(fn (array $record): ?string => is_array($record['bet_shop'] ?? null)
+                        ? 'The owner of '.($record['bet_shop']['name'] ?? 'this shop').' buying float'.(($record['bet_shop']['status'] ?? null) === 'closed' ? ' (the shop is closed)' : '')
+                        : null)
+                    ->placeholder('—')
+                    ->visible(fn (): bool => $this->tab === 'unmatched'),
                 TextColumn::make('top_suggestion')
                     ->label('Suggested customer')
                     ->state(fn (array $record): ?string => ($top = DepositSuggestion::top($record)) ? DepositSuggestion::customerLabel($top) : null)
@@ -176,14 +194,22 @@ class UnmatchedDepositsPage extends Page implements HasTable
                     ->label('Resolution')
                     ->state(fn (array $record): ?string => $record['resolution']['action'] ?? null)
                     ->badge()
-                    ->color(fn (?string $state): string => $state === 'assigned' ? 'success' : 'gray')
-                    ->formatStateUsing(fn (?string $state): string => ucfirst((string) $state))
+                    ->color(fn (?string $state): string => match ($state) {
+                        'assigned' => 'success',
+                        'shop_float' => 'info',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (?string $state): string => ucfirst(str_replace('_', ' ', (string) $state)))
                     ->visible(fn (): bool => $this->tab !== 'unmatched'),
                 TextColumn::make('resolution_target')
                     ->label(fn (): string => $this->tab === 'refunded' ? 'Reversal ref' : 'Credited to')
                     ->state(fn (array $record): ?string => static::resolutionTarget($record))
                     ->placeholder('—')
-                    ->url(fn (array $record): ?string => $this->tab === 'assigned' ? ReferralWithdrawalsPage::customerUrl($record['resolution']['customer_id'] ?? null) : null)
+                    ->url(fn (array $record): ?string => match ($this->tab) {
+                        'assigned' => ReferralWithdrawalsPage::customerUrl($record['resolution']['customer_id'] ?? null),
+                        'shop_float' => static::creditedShopUrl($record),
+                        default => null,
+                    })
                     ->visible(fn (): bool => $this->tab !== 'unmatched'),
                 TextColumn::make('resolution_note')
                     ->label('Note')
@@ -206,6 +232,8 @@ class UnmatchedDepositsPage extends Page implements HasTable
                 $this->suggestionsAction(),
                 $this->assignDepositAction(),
                 $this->refundDepositAction(),
+                $this->creditShopFloatAction(),
+                $this->voidShopFloatPurchaseAction(fn (array $record): ?array => static::resolvedFloatPurchase($record)),
             ])
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(50)
@@ -213,6 +241,7 @@ class UnmatchedDepositsPage extends Page implements HasTable
             ->emptyStateHeading(fn (): string => match (true) {
                 $this->apiError => 'Unmatched deposits unavailable',
                 $this->tab === 'unmatched' => 'No unmatched deposits',
+                $this->tab === 'shop_float' => 'No deposits credited to shop floats yet',
                 default => 'Nothing '.strtolower(self::TABS[$this->tab]).' yet',
             })
             ->emptyStateDescription(fn (): string => $this->apiError
@@ -274,7 +303,7 @@ class UnmatchedDepositsPage extends Page implements HasTable
         return AuditLog::query()
             ->with('user:id,name')
             ->where('auditable_type', 'KadiApi\\Deposit')
-            ->whereIn('event', ['assigned', 'refunded', 'matched'])
+            ->whereIn('event', ['assigned', 'refunded', 'matched', 'shop_float'])
             ->whereIn('auditable_id', array_map('intval', $depositIds))
             ->latest('id')
             ->get()
@@ -335,6 +364,10 @@ class UnmatchedDepositsPage extends Page implements HasTable
 
         if (($resolution['action'] ?? null) === 'refunded') {
             return $resolution['mpesa_reference'] ?? null;
+        }
+
+        if (($resolution['action'] ?? null) === 'shop_float') {
+            return filled($resolution['shop_no'] ?? null) ? trim($resolution['shop_no'].' · '.($resolution['shop_name'] ?? '')) : null;
         }
 
         if (filled($resolution['customer_name'] ?? null)) {

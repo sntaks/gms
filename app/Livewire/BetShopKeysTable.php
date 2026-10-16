@@ -6,7 +6,6 @@ use App\Concerns\HandlesBetShopWrites;
 use App\Exceptions\GameApiException;
 use App\Filament\Pages\BetShopDetailPage;
 use App\Filament\Pages\UnmatchedDepositsPage;
-use App\Models\AuditLog;
 use App\Services\GameApiService;
 use App\Support\ApiTablePaginator;
 use App\Support\Format;
@@ -139,21 +138,7 @@ class BetShopKeysTable extends TableWidget
      */
     public static function gmsUsers(array $keyIds, string $event): array
     {
-        if ($keyIds === []) {
-            return [];
-        }
-
-        return AuditLog::query()
-            ->with('user:id,name')
-            ->where('auditable_type', 'KadiApi\\BetShopKey')
-            ->where('event', $event)
-            ->whereIn('auditable_id', array_map('intval', $keyIds))
-            ->latest('id')
-            ->get()
-            ->unique('auditable_id')
-            ->filter(fn (AuditLog $log): bool => filled($log->user?->name))
-            ->mapWithKeys(fn (AuditLog $log): array => [(int) $log->auditable_id => $log->user->name])
-            ->all();
+        return static::gmsUsersFor('BetShopKey', $keyIds, $event);
     }
 
     protected function revokeKeyAction(): Action
