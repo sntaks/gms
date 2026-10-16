@@ -79,6 +79,17 @@ it('groups the finance reports in the cluster menu, overview first', function ()
         ]);
 });
 
+it('lets the main sidebar collapse on desktop and keeps the report menu a dropdown below 1536px', function (): void {
+    $this->actingAs($this->admin);
+
+    $html = (string) get(CashFlowReport::getUrl())->assertOk()->getContent();
+
+    expect($html)
+        ->toContain('fi-topbar-collapse-sidebar-btn-ctn')
+        ->toContain('fi-page-sub-navigation-dropdown')
+        ->toContain('@media (min-width: 48rem) and (max-width: 95.98rem)');
+});
+
 it('opens each cluster on its first report', function (): void {
     $this->actingAs($this->admin);
 
