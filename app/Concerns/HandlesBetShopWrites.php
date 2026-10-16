@@ -3,7 +3,9 @@
 namespace App\Concerns;
 
 use App\Exceptions\GameApiException;
+use App\Models\AuditLog;
 use App\Support\ApiAuditLog;
+use App\Support\Format;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Arr;
@@ -38,6 +40,55 @@ trait HandlesBetShopWrites
     public static function canManageBetShops(): bool
     {
         return auth()->user()?->hasPermissionTo('bet-shops.manage') ?? false;
+    }
+
+    /**
+     * Crediting and voiding float purchases, and recording and voiding redemptions.
+     */
+    public static function canManageShopFloat(): bool
+    {
+        return auth()->user()?->hasPermissionTo('bet-shops.float') ?? false;
+    }
+
+    /**
+     * KadiApi's message, plus what the float holds when a refusal reports it
+     * (`insufficient_float` carries `float_balance` at the top level).
+     */
+    protected static function betShopRefusalMessage(GameApiException $e): string
+    {
+        $message = static::betShopErrorMessage($e);
+
+        if (isset($e->body['float_balance']) && is_numeric($e->body['float_balance'])) {
+            $message .= ' The float holds '.Format::money($e->body['float_balance']).'.';
+        }
+
+        return $message;
+    }
+
+    /**
+     * The GMS user behind each write of one kind, from the audit log, keyed by the KadiApi id.
+     * KadiApi records only the API key, so writes made elsewhere have no entry.
+     *
+     * @param  list<int|string>  $ids
+     * @return array<int, string>
+     */
+    public static function gmsUsersFor(string $subject, array $ids, string $event): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return AuditLog::query()
+            ->with('user:id,name')
+            ->where('auditable_type', 'KadiApi\\'.$subject)
+            ->where('event', $event)
+            ->whereIn('auditable_id', array_map('intval', $ids))
+            ->latest('id')
+            ->get()
+            ->unique('auditable_id')
+            ->filter(fn (AuditLog $log): bool => filled($log->user?->name))
+            ->mapWithKeys(fn (AuditLog $log): array => [(int) $log->auditable_id => $log->user->name])
+            ->all();
     }
 
     /**
@@ -118,7 +169,7 @@ trait HandlesBetShopWrites
         if (in_array($e->statusCode, [404, 409], true)) {
             Notification::make()
                 ->title($refusalTitles[$e->errorCode ?? ''] ?? ($e->statusCode === 404 ? 'Not found' : $failureTitle))
-                ->body($message)
+                ->body(static::betShopRefusalMessage($e))
                 ->warning()
                 ->send();
 
