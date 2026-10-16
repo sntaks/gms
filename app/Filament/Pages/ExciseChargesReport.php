@@ -2,12 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use UnitEnum;
 
 /**
  * One row per excise duty charge, from a deposit, a signup bonus or a cash load at
@@ -34,7 +36,9 @@ class ExciseChargesReport extends FinanceListReportPage
 
     protected static ?string $navigationLabel = 'Excise Charges';
 
-    protected static ?int $navigationSort = 18;
+    protected static ?int $navigationSort = 17;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::TAX;
 
     protected ?string $heading = 'Excise Duty Charges';
 

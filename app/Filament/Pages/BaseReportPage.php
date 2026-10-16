@@ -9,18 +9,15 @@ use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Livewire\Attributes\Url;
-use UnitEnum;
 
 /**
- * Shared base for the Reports group. Owns one filter dimension — the report
+ * Shared base for the finance and game reports. Owns one filter dimension — the report
  * period — exposed through a single Header Filter Action and persisted in the
  * URL query string so reports stay shareable. Subclasses read the resolved
  * range via {@see dateRange()}.
  */
 abstract class BaseReportPage extends Page
 {
-    protected static string|UnitEnum|null $navigationGroup = 'Reports';
-
     #[Url]
     public string $period = 'this_month';
 

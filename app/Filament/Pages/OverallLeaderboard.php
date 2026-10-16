@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\GameReports\GameReportsCluster;
 use App\Services\GameApiService;
 use App\Support\ApiTablePaginator;
 use App\Support\Format;
@@ -13,7 +14,6 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
-use UnitEnum;
 
 /**
  * This week's winners across single games and competitions combined. The API
@@ -27,7 +27,7 @@ class OverallLeaderboard extends BaseReportPage implements HasTable
 
     protected static ?string $navigationLabel = 'Overall Leaderboard';
 
-    protected static string|UnitEnum|null $navigationGroup = '📈 Reports';
+    protected static ?string $cluster = GameReportsCluster::class;
 
     protected static ?int $navigationSort = 3;
 

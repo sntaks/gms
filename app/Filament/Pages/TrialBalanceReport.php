@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
+use UnitEnum;
 
 class TrialBalanceReport extends FinanceReportPage
 {
@@ -12,6 +14,8 @@ class TrialBalanceReport extends FinanceReportPage
     protected static ?string $navigationLabel = 'Trial Balance';
 
     protected static ?int $navigationSort = 13;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::OVERVIEW;
 
     protected ?string $heading = 'Trial Balance';
 

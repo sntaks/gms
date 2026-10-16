@@ -62,6 +62,7 @@ class AdminPanelProvider extends PanelProvider
             ->databaseNotificationsPolling('30s')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\Filament\Clusters')
             ->pages([
                 Dashboard::class,
             ])
@@ -87,9 +88,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('🎁 Referrals'),
                 NavigationGroup::make('🎯 Game Results'),
                 NavigationGroup::make('🤝 Shareholders'),
-                NavigationGroup::make('📈 Reports'),
-                NavigationGroup::make('🧾 Finance Reports'),
-                NavigationGroup::make('📊 Financial'),
+                NavigationGroup::make('📊 Finance'),
                 NavigationGroup::make('👥 Access Management'),
                 NavigationGroup::make('⚙️ Administration'),
             ])

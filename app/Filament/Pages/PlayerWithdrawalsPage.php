@@ -14,9 +14,11 @@ class PlayerWithdrawalsPage extends FinanceListReportPage
 
     protected static ?string $navigationLabel = 'Player Withdrawals';
 
-    protected static string|UnitEnum|null $navigationGroup = '📊 Financial';
+    protected static ?string $cluster = null;
 
-    protected static ?int $navigationSort = 2;
+    protected static string|UnitEnum|null $navigationGroup = '📊 Finance';
+
+    protected static ?int $navigationSort = 3;
 
     protected ?string $heading = 'Player Withdrawals';
 

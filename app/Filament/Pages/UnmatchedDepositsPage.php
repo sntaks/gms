@@ -57,7 +57,7 @@ class UnmatchedDepositsPage extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Unmatched Deposits';
 
-    protected static string|UnitEnum|null $navigationGroup = '📊 Financial';
+    protected static string|UnitEnum|null $navigationGroup = '📊 Finance';
 
     protected static ?int $navigationSort = 2;
 

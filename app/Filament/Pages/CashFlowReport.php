@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
+use UnitEnum;
 
 class CashFlowReport extends FinanceReportPage
 {
@@ -23,6 +25,8 @@ class CashFlowReport extends FinanceReportPage
     protected static ?string $navigationLabel = 'Cash Flow';
 
     protected static ?int $navigationSort = 11;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::OVERVIEW;
 
     protected ?string $heading = 'Cash Flow';
 

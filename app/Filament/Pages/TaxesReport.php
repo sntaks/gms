@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
+use UnitEnum;
 
 class TaxesReport extends FinanceReportPage
 {
@@ -11,7 +13,9 @@ class TaxesReport extends FinanceReportPage
 
     protected static ?string $navigationLabel = 'Taxes (Estimate)';
 
-    protected static ?int $navigationSort = 15;
+    protected static ?int $navigationSort = 19;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::TAX;
 
     protected ?string $heading = 'Estimated Taxes';
 

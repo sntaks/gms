@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Filament\Pages\Widgets\FinanceSummaryWidget;
 use App\Services\GameApiService;
 use Carbon\CarbonInterface;
@@ -26,7 +27,9 @@ use UnitEnum;
  */
 abstract class FinanceReportPage extends BaseReportPage
 {
-    protected static string|UnitEnum|null $navigationGroup = '🧾 Finance Reports';
+    protected static ?string $cluster = FinanceReportsCluster::class;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::ACTIVITY;
 
     protected string $view = 'filament.pages.finance-report';
 

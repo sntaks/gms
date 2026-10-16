@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Exceptions\GameApiException;
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Services\GameApiService;
 use App\Support\ApiTablePaginator;
 use App\Support\Format;
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Url;
+use UnitEnum;
 
 /**
  * Excise duty payments made to KRA. Recording one attaches every unremitted
@@ -36,7 +38,9 @@ class ExciseRemittancesReport extends FinanceListReportPage
 
     protected static ?string $navigationLabel = 'KRA Remittances';
 
-    protected static ?int $navigationSort = 19;
+    protected static ?int $navigationSort = 18;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::TAX;
 
     protected ?string $heading = 'KRA Remittances';
 

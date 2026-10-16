@@ -45,7 +45,9 @@ class DepositsPage extends FinanceListReportPage
 
     protected static ?string $navigationLabel = 'Deposits';
 
-    protected static string|UnitEnum|null $navigationGroup = '📊 Financial';
+    protected static ?string $cluster = null;
+
+    protected static string|UnitEnum|null $navigationGroup = '📊 Finance';
 
     protected static ?int $navigationSort = 1;
 

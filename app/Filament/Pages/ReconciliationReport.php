@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
 use Filament\Actions\Action;
+use UnitEnum;
 
 class ReconciliationReport extends FinanceReportPage
 {
@@ -13,6 +15,8 @@ class ReconciliationReport extends FinanceReportPage
     protected static ?string $navigationLabel = 'Reconciliation';
 
     protected static ?int $navigationSort = 14;
+
+    protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::OVERVIEW;
 
     protected ?string $heading = 'Reconciliation';
 
