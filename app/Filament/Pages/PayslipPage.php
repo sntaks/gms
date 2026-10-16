@@ -174,8 +174,9 @@ class PayslipPage extends Page
             $purchases = [];
         }
 
-        $totalDeposits = collect($transactions)->where('payment_type', 'deposit')->sum('amount');
-        $totalWithdrawals = collect($transactions)->where('payment_type', 'withdrawal')->sum('amount');
+        // Cash paid in or collected at a bet shop counts as a deposit or withdrawal too.
+        $totalDeposits = collect($transactions)->whereIn('payment_type', ['deposit', 'shop_load'])->sum('amount');
+        $totalWithdrawals = collect($transactions)->whereIn('payment_type', ['withdrawal', 'shop_withdrawal'])->sum('amount');
         $totalPurchases = collect($purchases)->sum('amount');
 
         try {

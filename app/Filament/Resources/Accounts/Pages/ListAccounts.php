@@ -36,8 +36,9 @@ class ListAccounts extends Page implements HasTable
                 response: $this->fetchRecords(),
                 page: $page,
                 perPage: $recordsPerPage,
-                search: $search,
-                searchKeys: ['name', 'email', 'phone_no'],
+                // A player number may be typed with spaces ("1234 5678"); KadiApi sends bare digits.
+                search: is_string($search) && preg_match('/^[\d\s-]{4,}$/', $search) === 1 ? preg_replace('/\D/', '', $search) : $search,
+                searchKeys: ['name', 'email', 'phone_no', 'player_no'],
                 sortColumn: $sortColumn ?? 'id',
                 sortDirection: $sortDirection ?? 'desc',
             ))
@@ -48,6 +49,12 @@ class ListAccounts extends Page implements HasTable
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('player_no')
+                    ->label('Player no.')
+                    ->fontFamily('mono')
+                    ->searchable()
+                    ->formatStateUsing(fn ($state): string => Format::playerNo($state))
+                    ->placeholder('—'),
                 TextColumn::make('phone_no')
                     ->label('Phone')
                     ->searchable()

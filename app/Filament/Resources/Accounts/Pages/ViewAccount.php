@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Accounts\Pages;
 
+use App\Filament\Pages\BetShopsPage;
 use App\Filament\Pages\CustomerStatementReport;
 use App\Filament\Resources\Accounts\AccountResource;
 use App\Models\Account;
@@ -21,6 +22,18 @@ use Illuminate\Support\Facades\Cache;
 
 class ViewAccount extends Page
 {
+    /**
+     * Labels for the transaction types shown in the Deposits and Withdrawals tabs.
+     *
+     * @var array<string, string>
+     */
+    public const TRANSACTION_TYPES = [
+        'deposit' => 'M-Pesa deposit',
+        'shop_load' => 'Shop load',
+        'withdrawal' => 'M-Pesa withdrawal',
+        'shop_withdrawal' => 'Shop withdrawal',
+    ];
+
     protected static string $resource = AccountResource::class;
 
     protected string $view = 'filament.resources.accounts.pages.view-account';
@@ -79,6 +92,8 @@ class ViewAccount extends Page
                     'balance' => $this->apiCustomer['balance'] ?? 0,
                     'deposits' => $this->apiCustomer['deposits'] ?? 0,
                     'withdraws' => $this->apiCustomer['withdraws'] ?? 0,
+                    'shop_loads' => $this->apiCustomer['shop_loads'] ?? 0,
+                    'shop_withdrawals' => $this->apiCustomer['shop_withdrawals'] ?? 0,
                     'purchases_load' => $this->apiCustomer['purchases_load'] ?? 0,
                     'purchases_gift' => $this->apiCustomer['purchases_gift'] ?? 0,
                     'purchases_emojis' => $this->apiCustomer['purchases_emojis'] ?? 0,
@@ -98,8 +113,8 @@ class ViewAccount extends Page
                 fn () => $gameApi->getCustomerTransactions($customerId, 'all')
             );
             $transactions = $txResponse['transactions'] ?? [];
-            $this->deposits = array_values(array_filter($transactions, fn ($tx) => ($tx['payment_type'] ?? '') === 'deposit'));
-            $this->withdrawals = array_values(array_filter($transactions, fn ($tx) => ($tx['payment_type'] ?? '') === 'withdrawal'));
+            $this->deposits = array_values(array_filter($transactions, fn ($tx) => in_array($tx['payment_type'] ?? '', ['deposit', 'shop_load'], true)));
+            $this->withdrawals = array_values(array_filter($transactions, fn ($tx) => in_array($tx['payment_type'] ?? '', ['withdrawal', 'shop_withdrawal'], true)));
         } catch (\Throwable) {
             $anyFailed = true;
             $this->deposits = [];
@@ -140,6 +155,13 @@ class ViewAccount extends Page
                             ->label('Email')
                             ->copyable()
                             ->placeholder('—'),
+                        TextEntry::make('player_no')
+                            ->label('Player number')
+                            ->helperText('Given at a bet shop counter to load cash.')
+                            ->fontFamily('mono')
+                            ->formatStateUsing(fn ($state): string => Format::playerNo($state))
+                            ->copyable()
+                            ->placeholder('—'),
                         TextEntry::make('status')
                             ->label('Status')
                             ->badge()
@@ -166,10 +188,18 @@ class ViewAccount extends Page
                             ->label('Game Credits')
                             ->numeric(),
                         TextEntry::make('wallet_deposits')
-                            ->label('Lifetime Deposits')
+                            ->label('M-Pesa Deposits')
                             ->formatStateUsing(fn ($state): string => Format::money($state)),
                         TextEntry::make('wallet_withdraws')
-                            ->label('Lifetime Withdrawals')
+                            ->label('M-Pesa Withdrawals')
+                            ->formatStateUsing(fn ($state): string => Format::money($state)),
+                        TextEntry::make('shop_loads')
+                            ->label('Shop Loads')
+                            ->helperText('Cash loaded at bet shops, after excise duty')
+                            ->formatStateUsing(fn ($state): string => Format::money($state)),
+                        TextEntry::make('shop_withdrawals')
+                            ->label('Shop Withdrawals')
+                            ->helperText('Cash collected at bet shops')
                             ->formatStateUsing(fn ($state): string => Format::money($state)),
                     ]),
 
@@ -204,6 +234,7 @@ class ViewAccount extends Page
                                     ->hiddenLabel()
                                     ->placeholder('No deposit records available.')
                                     ->table([
+                                        TableColumn::make('Type'),
                                         TableColumn::make('Transaction ID'),
                                         TableColumn::make('Amount'),
                                         TableColumn::make('Date'),
@@ -218,11 +249,30 @@ class ViewAccount extends Page
                                     ->hiddenLabel()
                                     ->placeholder('No withdrawal records available.')
                                     ->table([
+                                        TableColumn::make('Type'),
                                         TableColumn::make('Transaction ID'),
                                         TableColumn::make('Amount'),
                                         TableColumn::make('Date'),
                                     ])
                                     ->schema($this->transactionRowSchema()),
+                            ]),
+
+                        Tab::make('Shop loads')
+                            ->visible(fn (): bool => BetShopsPage::canAccess())
+                            ->schema([
+                                ViewEntry::make('shop_loads_tab')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-loads-tab')
+                                    ->viewData(['customerId' => $this->customerId]),
+                            ]),
+
+                        Tab::make('Shop withdrawals')
+                            ->visible(fn (): bool => BetShopsPage::canAccess())
+                            ->schema([
+                                ViewEntry::make('shop_withdrawals_tab')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-withdrawals-tab')
+                                    ->viewData(['customerId' => $this->customerId]),
                             ]),
 
                         Tab::make('Referrals')
@@ -274,6 +324,7 @@ class ViewAccount extends Page
     private function transactionRowSchema(): array
     {
         return [
+            TextEntry::make('type')->placeholder('—'),
             TextEntry::make('transaction_id')->placeholder('—'),
             TextEntry::make('amount')
                 ->formatStateUsing(fn ($state): string => Format::money($state)),
@@ -291,6 +342,7 @@ class ViewAccount extends Page
             'name' => $this->apiCustomer['name'] ?? null,
             'phone_no' => $this->apiCustomer['phone_no'] ?? null,
             'email' => $this->apiCustomer['email'] ?? null,
+            'player_no' => $this->apiCustomer['player_no'] ?? null,
             'status' => $this->apiCustomer['status'] ?? Account::STATUS_ACTIVE,
             'current_vip' => $this->apiCustomer['current_vip'] ?? null,
             'credits' => $this->apiCustomer['credits'] ?? 0,
@@ -298,6 +350,8 @@ class ViewAccount extends Page
             'coins' => $this->walletInfo['coins'] ?? 0,
             'wallet_deposits' => $this->walletInfo['deposits'] ?? 0,
             'wallet_withdraws' => $this->walletInfo['withdraws'] ?? 0,
+            'shop_loads' => $this->walletInfo['shop_loads'] ?? 0,
+            'shop_withdrawals' => $this->walletInfo['shop_withdrawals'] ?? 0,
             'deposit_txns' => array_map($this->normalizeTransaction(...), $this->deposits),
             'withdrawal_txns' => array_map($this->normalizeTransaction(...), $this->withdrawals),
             'purchase_txns' => $this->purchases,
@@ -311,6 +365,7 @@ class ViewAccount extends Page
     private function normalizeTransaction(array $transaction): array
     {
         return [
+            'type' => self::TRANSACTION_TYPES[$transaction['payment_type'] ?? ''] ?? null,
             'transaction_id' => $transaction['transaction_id'] ?? $transaction['id'] ?? null,
             'amount' => $transaction['amount'] ?? 0,
             'date' => $transaction['date'] ?? $transaction['created_at'] ?? null,

@@ -31,6 +31,7 @@ class RoleSeeder extends Seeder
             'bet-shops.view',
             'bet-shops.manage',
             'bet-shops.float',
+            'bet-shops.reverse-loads',
 
             // Shareholders
             'holders.view',
