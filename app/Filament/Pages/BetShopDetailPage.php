@@ -244,6 +244,20 @@ class BetShopDetailPage extends Page
                                     ->view('infolists.bet-shop-float-redemptions-tab')
                                     ->viewData(['shopId' => (int) $this->shop]),
                             ]),
+                        Tab::make('Loads')
+                            ->schema([
+                                ViewEntry::make('loads')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-loads-tab')
+                                    ->viewData(['shopId' => (int) $this->shop]),
+                            ]),
+                        Tab::make('Withdrawals')
+                            ->schema([
+                                ViewEntry::make('withdrawals')
+                                    ->hiddenLabel()
+                                    ->view('infolists.bet-shop-withdrawals-tab')
+                                    ->viewData(['shopId' => (int) $this->shop]),
+                            ]),
                     ]),
             ]);
     }

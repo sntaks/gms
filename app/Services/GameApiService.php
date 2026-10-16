@@ -558,8 +558,10 @@ class GameApiService
      * Endpoint: POST /api/v1/customers/transactions/{enc}
      *
      * Maps payment_type from PHP class name to human-readable label:
-     *   "App\Models\Deposit"  → "deposit"
-     *   "App\Models\Withdraw" → "withdrawal"
+     *   "App\Models\Deposit"        → "deposit"
+     *   "App\Models\Withdraw"       → "withdrawal"
+     *   "App\Models\BetShopLoad"    → "shop_load" (cash loaded at a bet shop, money in)
+     *   "App\Models\ShopWithdrawal" → "shop_withdrawal" (cash collected at a bet shop, money out)
      *
      * @param  string  $type  "deposit" | "withdraw" | "all"
      */
@@ -573,6 +575,8 @@ class GameApiService
         $typeMap = [
             'App\\Models\\Deposit' => 'deposit',
             'App\\Models\\Withdraw' => 'withdrawal',
+            'App\\Models\\BetShopLoad' => 'shop_load',
+            'App\\Models\\ShopWithdrawal' => 'shop_withdrawal',
         ];
 
         $response['transactions'] = array_map(function (array $tx) use ($typeMap): array {
@@ -1893,6 +1897,89 @@ class GameApiService
         $this->forgetFinanceReports();
 
         return $redemption;
+    }
+
+    // -------------------------------------------------------------------------
+    // Bet shop operations — cash loads and cash withdrawals at the counters
+    // -------------------------------------------------------------------------
+
+    /**
+     * One page of cash loads, newest first, for every shop or one shop, with the player's
+     * full name and customer id.
+     * Endpoint: GET /api/v1/bet-shops/loads or /bet-shops/{enc}/loads
+     *
+     * @param  array<string, mixed>  $filters  status (completed|reversed), customer_id, from, to (Y-m-d), page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listShopLoads(?int $shopId = null, array $filters = []): array
+    {
+        $path = $shopId === null ? '/bet-shops/loads' : '/bet-shops/'.$this->encryptId($shopId).'/loads';
+
+        return $this->makeRequest('GET', $path, query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * One cash load, e.g. the one behind an excise duty charge's `bet_shop_load_id`.
+     * Endpoint: GET /api/v1/bet-shops/loads/{enc}  (the encrypted `id`, not `load_id`)
+     *
+     * @return array<string, mixed>
+     *
+     * @throws GameApiException 404 when the load does not exist
+     */
+    public function getShopLoad(int $loadId): array
+    {
+        $enc = $this->encryptId($loadId);
+
+        return $this->makeRequest('GET', "/bet-shops/loads/{$enc}")['data'] ?? [];
+    }
+
+    /**
+     * Reverse a cash load made by mistake: the player's wallet gives back the gross amount,
+     * the excise duty is returned and the shop float is refunded.
+     * Endpoint: POST /api/v1/bet-shops/loads/{enc}/reverse  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The reversed load.
+     *
+     * @throws GameApiException 409 player_has_spent, excise_remitted or already_reversed
+     */
+    public function reverseShopLoad(int $loadId, string $reason, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($loadId);
+
+        $load = $this->makeRequest('POST', "/bet-shops/loads/{$enc}/reverse", ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $load;
+    }
+
+    /**
+     * One page of cash withdrawals, newest first, for every shop or one shop. Never with
+     * the pickup code.
+     * Endpoint: GET /api/v1/bet-shops/withdrawals or /bet-shops/{enc}/withdrawals
+     *
+     * @param  array<string, mixed>  $filters  status (pending|paid|cancelled|rejected|expired), customer_id, from, to (Y-m-d), page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listShopWithdrawals(?int $shopId = null, array $filters = []): array
+    {
+        $path = $shopId === null ? '/bet-shops/withdrawals' : '/bet-shops/'.$this->encryptId($shopId).'/withdrawals';
+
+        return $this->makeRequest('GET', $path, query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * One page of a player's own shop cash withdrawals, newest first.
+     * Endpoint: GET /api/v1/customers/{enc}/shop-withdrawals
+     *
+     * @param  array<string, mixed>  $filters  status, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listCustomerShopWithdrawals(int $customerId, array $filters = []): array
+    {
+        $enc = $this->encryptId($customerId);
+
+        return $this->makeRequest('GET', "/customers/{$enc}/shop-withdrawals", query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
     }
 
     // -------------------------------------------------------------------------

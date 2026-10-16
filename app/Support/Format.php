@@ -72,6 +72,21 @@ class Format
     }
 
     /**
+     * A player number for display, `1234 5678`. KadiApi sends the 8 bare digits; anything
+     * else is shown as sent, or a dash when empty.
+     */
+    public static function playerNo(int|string|null $playerNo): string
+    {
+        $digits = preg_replace('/\D/', '', (string) $playerNo);
+
+        if (strlen($digits) === 8) {
+            return substr($digits, 0, 4).' '.substr($digits, 4);
+        }
+
+        return blank($playerNo) ? '—' : (string) $playerNo;
+    }
+
+    /**
      * Parse an API date into the app (Nairobi) timezone, or null when empty/invalid.
      * M-Pesa's raw `YmdHis` TransTime is Nairobi local time.
      */

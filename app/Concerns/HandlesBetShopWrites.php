@@ -50,6 +50,24 @@ trait HandlesBetShopWrites
         return auth()->user()?->hasPermissionTo('bet-shops.float') ?? false;
     }
 
+    public static function canReverseShopLoads(): bool
+    {
+        return auth()->user()?->hasPermissionTo('bet-shops.reverse-loads') ?? false;
+    }
+
+    /**
+     * Who KadiApi says made a load, a payout or a reversal: `api_key:{id}` names a key,
+     * which may be a shop's own key or the GMS's, so it is shown as the key alone.
+     */
+    public static function actorLabel(?string $actor): ?string
+    {
+        if (blank($actor)) {
+            return null;
+        }
+
+        return str_starts_with($actor, 'api_key:') ? 'API key #'.substr($actor, 8) : $actor;
+    }
+
     /**
      * KadiApi's message, plus what the float holds when a refusal reports it
      * (`insufficient_float` carries `float_balance` at the top level).
