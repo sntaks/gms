@@ -56,16 +56,11 @@ trait HandlesBetShopWrites
     }
 
     /**
-     * Who KadiApi says made a load, a payout or a reversal: `api_key:{id}` names a key,
-     * which may be a shop's own key or the GMS's, so it is shown as the key alone.
+     * Who KadiApi says made a load, a payout or a reversal. See {@see Format::apiActor()}.
      */
     public static function actorLabel(?string $actor): ?string
     {
-        if (blank($actor)) {
-            return null;
-        }
-
-        return str_starts_with($actor, 'api_key:') ? 'API key #'.substr($actor, 8) : $actor;
+        return Format::apiActor($actor);
     }
 
     /**

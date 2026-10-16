@@ -33,6 +33,8 @@ class TopCustomersReport extends FinanceReportPage
             'won' => 'Won',
             'withdrawn' => 'Withdrawn',
             'balance' => 'Wallet balance',
+            'shop_loaded' => 'Cash loaded at shops',
+            'shop_withdrawn' => 'Cash withdrawn at shops',
         ];
     }
 
@@ -70,14 +72,17 @@ class TopCustomersReport extends FinanceReportPage
         return [
             [
                 'title' => 'Ranked by '.strtolower(self::sortOptions()[$this->sort] ?? 'net gaming'),
-                'headers' => ['#', 'Player', 'Deposited', 'Withdrawn', 'Staked', 'Won', 'Net gaming', 'Balance'],
+                'description' => 'Deposited and withdrawn include cash at bet shops. Shop loaded is gross, before excise duty, so it is more than the customer page\'s shop loads.',
+                'headers' => ['#', 'Player', 'Deposited', 'Shop loaded', 'Withdrawn', 'Shop withdrawn', 'Staked', 'Won', 'Net gaming', 'Balance'],
                 'rows' => collect($data['items'] ?? [])
                     ->values()
                     ->map(fn (array $row, int $index): array => [
                         (string) ($index + 1),
                         ($row['customer_name'] ?? '—').' (#'.($row['customer_id'] ?? '—').')',
                         Format::money($row['deposited'] ?? 0),
+                        Format::money($row['shop_loaded'] ?? 0),
                         Format::money($row['withdrawn'] ?? 0),
+                        Format::money($row['shop_withdrawn'] ?? 0),
                         Format::money($row['staked'] ?? 0),
                         Format::money($row['won'] ?? 0),
                         Format::money($row['net_gaming'] ?? 0),

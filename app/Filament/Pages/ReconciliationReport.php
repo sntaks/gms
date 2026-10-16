@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Support\Format;
 use BackedEnum;
+use Filament\Actions\Action;
 
 class ReconciliationReport extends FinanceReportPage
 {
@@ -18,6 +19,34 @@ class ReconciliationReport extends FinanceReportPage
     protected function reportKey(): string
     {
         return 'reconciliation';
+    }
+
+    /**
+     * The check named `$key` in the report, when KadiApi ran it.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>|null
+     */
+    public static function check(array $data, string $key): ?array
+    {
+        return collect($data['checks'] ?? [])->first(fn ($check): bool => is_array($check) && ($check['key'] ?? null) === $key);
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('staleShopWithdrawals')
+                ->label(fn (): string => 'Stale shop withdrawals: '.number_format((int) (static::check($this->getReport(), 'stale_shop_withdrawals')['count'] ?? 0)))
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color('warning')
+                ->tooltip('Pending cash withdrawals the expiry job should have released. Opens the pending list.')
+                ->visible(fn (): bool => ShopWithdrawalsPage::canAccess() && (static::check($this->getReport(), 'stale_shop_withdrawals')['status'] ?? 'pass') !== 'pass')
+                ->url(fn (): string => ShopWithdrawalsPage::getUrlForStatus('pending')),
+            ...parent::getHeaderActions(),
+        ];
     }
 
     protected function summaryStats(array $data): array

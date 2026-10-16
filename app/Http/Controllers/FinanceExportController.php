@@ -45,6 +45,7 @@ class FinanceExportController extends Controller
             'type' => ['nullable', 'string', 'max:30'],
             'sort' => ['nullable', 'string', 'max:30'],
             'customer_id' => ['nullable', 'integer'],
+            'bet_shop_id' => ['nullable', 'integer'],
             'wallet_id' => ['nullable', 'integer'],
             'game_type' => ['nullable', 'integer'],
             'players' => ['nullable', 'integer'],

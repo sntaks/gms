@@ -9,7 +9,7 @@ use Filament\Widgets\TableWidget as BaseWidget;
 
 class ShareholdersTableWidget extends BaseWidget
 {
-    protected static ?int $sort = 31;
+    protected static ?int $sort = 32;
 
     protected int|string|array $columnSpan = 1;
 

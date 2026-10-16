@@ -72,6 +72,19 @@ class Format
     }
 
     /**
+     * Who KadiApi says made a bet shop load, payout or reversal: `api_key:{id}` names a key,
+     * which may be a shop's own key or the GMS's, so it is shown as the key alone.
+     */
+    public static function apiActor(?string $actor): ?string
+    {
+        if (blank($actor)) {
+            return null;
+        }
+
+        return str_starts_with($actor, 'api_key:') ? 'API key #'.substr($actor, 8) : $actor;
+    }
+
+    /**
      * A player number for display, `1234 5678`. KadiApi sends the 8 bare digits; anything
      * else is shown as sent, or a dash when empty.
      */
