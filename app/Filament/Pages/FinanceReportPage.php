@@ -255,6 +255,21 @@ abstract class FinanceReportPage extends BaseReportPage
         };
     }
 
+    /**
+     * Cells longer than this may wrap; shorter ones (amounts, counts, dates, labels) stay on one line.
+     */
+    public const ONE_LINE_MAX_LENGTH = 24;
+
+    /**
+     * Whether a breakdown cell is short enough to keep on one line. Squeezed columns would
+     * otherwise split an amount mid-number ("KES 1,122.0" / "0"); a wide table scrolls
+     * sideways inside its own box instead. Long text, like a check's detail, still wraps.
+     */
+    public static function keepsOnOneLine(mixed $state): bool
+    {
+        return is_scalar($state) && mb_strlen((string) $state) <= self::ONE_LINE_MAX_LENGTH;
+    }
+
     public function reportInfolist(Schema $schema): Schema
     {
         $blocks = $this->blocks($this->getReport());
@@ -276,7 +291,10 @@ abstract class FinanceReportPage extends BaseReportPage
                         ->placeholder('Nothing recorded for this period.')
                         ->table(array_map(fn (string $header): TableColumn => TableColumn::make($header), $block['headers']))
                         ->schema(array_map(
-                            fn (int $key): TextEntry => TextEntry::make("c{$key}"),
+                            fn (int $key): TextEntry => TextEntry::make("c{$key}")
+                                // Shown beside each value when the table stacks on a phone.
+                                ->label($block['headers'][$key])
+                                ->extraAttributes(fn ($state): array => static::keepsOnOneLine($state) ? ['style' => 'white-space: nowrap'] : []),
                             array_keys($block['headers']),
                         )),
                 ]);

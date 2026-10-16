@@ -201,6 +201,33 @@ it('renders each finance report for an admin with data from the API', function (
         ->assertSee($page === BalanceSheetReport::class ? 'A note' : 'Ledger warning shown to admins.');
 })->with('finance pages');
 
+it('keeps amounts on one line in report tables and lets long text wrap', function (): void {
+    fakeFinanceApi(['*/finance/reconciliation*' => Http::response(['data' => [
+        'status' => 'fail', 'counts' => ['pass' => 0, 'warn' => 0, 'fail' => 1],
+        'checks' => [['key' => 'drift', 'title' => 'Wallets match ledger', 'status' => 'fail', 'count' => 33, 'amount' => 494817,
+            'detail' => 'Customer wallet balances differ from the ledger by more than a shilling']],
+    ]])]);
+    $this->actingAs($this->admin);
+
+    $html = Livewire::test(ReconciliationReport::class)->html();
+    $cellIsOneLine = fn (string $text): bool => preg_match('/style="white-space: nowrap;?"(?:(?!fi-in-entry).)*?'.preg_quote($text, '/').'/s', $html) === 1;
+
+    expect($cellIsOneLine('KES 494,817.00'))->toBeTrue()
+        ->and($cellIsOneLine('Customer wallet balances differ from the ledger'))->toBeFalse();
+});
+
+it('labels each table value with its column name for the stacked phone layout', function (): void {
+    $this->actingAs($this->admin);
+
+    $labels = collect(Livewire::test(ReconciliationReport::class)->instance()->reportInfolist->getFlatComponents())
+        ->map(fn ($component): ?string => method_exists($component, 'getLabel') ? (string) $component->getLabel() : null)
+        ->filter()
+        ->values();
+
+    expect($labels)->toContain('Control', 'Amount', 'Detail')
+        ->not->toContain('C0', 'C1');
+});
+
 it('blocks non-admin roles from every finance report', function (string $page): void {
     $this->actingAs($this->manager);
 
