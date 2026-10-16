@@ -62,7 +62,8 @@ class GameApiService
         int $timeout = 8,
         int $connectTimeout = 5,
         ?string $idempotencyKey = null,
-        bool $readOnly = false
+        bool $readOnly = false,
+        bool $withIdempotencyKey = true,
     ): array {
         $url = $this->baseUrl.$path;
 
@@ -72,10 +73,11 @@ class GameApiService
         ];
 
         // Read-only POSTs (leaderboards, stats, lookups) are not mutations, so they only
-        // carry an Idempotency-Key when the caller explicitly supplies one.
+        // carry an Idempotency-Key when the caller explicitly supplies one. A write whose
+        // response must never be stored (issuing a shop key) opts out entirely.
         $isMutation = strtoupper($method) !== 'GET' && ! $readOnly;
 
-        if ($isMutation || $idempotencyKey !== null) {
+        if ($withIdempotencyKey && ($isMutation || $idempotencyKey !== null)) {
             $headers['Idempotency-Key'] = $idempotencyKey ?? Str::uuid()->toString();
         }
 
@@ -126,6 +128,7 @@ class GameApiService
                 $apiMessage,
                 is_array($decoded['errors'] ?? null) ? $decoded['errors'] : [],
                 is_string($decoded['code'] ?? null) ? $decoded['code'] : null,
+                is_array($decoded) ? $decoded : [],
             );
         }
 
@@ -1547,6 +1550,182 @@ class GameApiService
         $enc = $this->encryptId($customerId);
 
         return $this->makeRequest('GET', "/customers/{$enc}/promotions")['data'] ?? [];
+    }
+
+    // -------------------------------------------------------------------------
+    // Bet shops — /bet-shops, /bet-shop-keys (writes use the `write` limiter: 30/min)
+    // -------------------------------------------------------------------------
+
+    /**
+     * @var list<string>
+     */
+    public const BET_SHOP_STATUSES = ['active', 'suspended', 'closed'];
+
+    /**
+     * Fields a shop can be created or edited with. `shop_no` is only sent on create:
+     * owners use it in their bill ref, so it never changes.
+     *
+     * @var list<string>
+     */
+    public const BET_SHOP_FIELDS = ['shop_no', 'name', 'owner_name', 'owner_phone', 'location', 'notes'];
+
+    /**
+     * One page of bet shops, ordered by shop number, each with its float balance and active keys.
+     * Endpoint: GET /api/v1/bet-shops
+     *
+     * @param  array<string, mixed>  $filters  status, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listBetShops(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/bet-shops', query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * One bet shop with its float balance.
+     * Endpoint: GET /api/v1/bet-shops/{enc}
+     *
+     * @return array<string, mixed>
+     *
+     * @throws GameApiException 404 when the shop does not exist
+     */
+    public function getBetShop(int $shopId): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('GET', "/bet-shops/{$enc}")['data'] ?? [];
+    }
+
+    /**
+     * Onboard a shop and its float wallet (balance 0). The caller owns the Idempotency-Key so
+     * a retry of the same submission replays instead of creating twice.
+     * Endpoint: POST /api/v1/bet-shops  (rate limited: 30/min)
+     *
+     * @param  array<string, mixed>  $data  shop_no, name, owner_name, owner_phone, location, notes
+     * @return array<string, mixed> The new shop.
+     *
+     * @throws GameApiException 422 on validation (including a shop number already taken)
+     */
+    public function createBetShop(array $data, string $idempotencyKey): array
+    {
+        $body = $this->withoutBlankFilters(collect($data)->only(self::BET_SHOP_FIELDS)->all());
+
+        return $this->makeRequest('POST', '/bet-shops', $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+    }
+
+    /**
+     * Change a shop's details. `shop_no` and status are never sent: KadiApi ignores them here.
+     * Endpoint: PUT /api/v1/bet-shops/{enc}  (rate limited: 30/min)
+     *
+     * @param  array<string, mixed>  $data  name, owner_name, owner_phone, location, notes
+     * @return array<string, mixed> The updated shop.
+     *
+     * @throws GameApiException 404 not found, 422 validation
+     */
+    public function updateBetShop(int $shopId, array $data, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($shopId);
+        $body = collect($data)->only(array_values(array_diff(self::BET_SHOP_FIELDS, ['shop_no'])))->all();
+
+        return $this->makeRequest('PUT', "/bet-shops/{$enc}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+    }
+
+    /**
+     * Suspend a shop: its keys are refused until it is reactivated, the float is kept.
+     * Endpoint: POST /api/v1/bet-shops/{enc}/suspend  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The shop.
+     *
+     * @throws GameApiException 404 not found, 409 shop_closed, 422 validation
+     */
+    public function suspendBetShop(int $shopId, string $reason, string $idempotencyKey): array
+    {
+        return $this->changeBetShopStatus($shopId, 'suspend', ['reason' => $reason], $idempotencyKey);
+    }
+
+    /**
+     * Reactivate a suspended shop so its keys work again.
+     * Endpoint: POST /api/v1/bet-shops/{enc}/activate  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The shop.
+     *
+     * @throws GameApiException 404 not found, 409 shop_closed, 422 validation
+     */
+    public function activateBetShop(int $shopId, ?string $reason, string $idempotencyKey): array
+    {
+        return $this->changeBetShopStatus($shopId, 'activate', $this->withoutBlankFilters(['reason' => $reason]), $idempotencyKey);
+    }
+
+    /**
+     * Close a shop for good, revoking all its keys. Only once its float is 0.
+     * Endpoint: POST /api/v1/bet-shops/{enc}/close  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The shop.
+     *
+     * @throws GameApiException 404 not found, 409 float_not_empty, 422 validation
+     */
+    public function closeBetShop(int $shopId, string $reason, string $idempotencyKey): array
+    {
+        return $this->changeBetShopStatus($shopId, 'close', ['reason' => $reason], $idempotencyKey);
+    }
+
+    /**
+     * @param  'suspend'|'activate'|'close'  $change
+     * @param  array<string, mixed>  $body
+     * @return array<string, mixed>
+     */
+    protected function changeBetShopStatus(int $shopId, string $change, array $body, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('POST', "/bet-shops/{$enc}/{$change}", $body, timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
+    }
+
+    /**
+     * One page of a shop's API keys, newest first. The key itself is never returned; `key_hint`
+     * is its last 4 characters.
+     * Endpoint: GET /api/v1/bet-shops/{enc}/keys
+     *
+     * @param  array<string, mixed>  $filters  page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listBetShopKeys(int $shopId, array $filters = []): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('GET', "/bet-shops/{$enc}/keys", query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * Issue a key for the shop's desktop system. The response holds `key` this once. Sent
+     * without an Idempotency-Key, so KadiApi never stores the response; a retry after a
+     * timeout would issue a second key, so callers never retry this.
+     * Endpoint: POST /api/v1/bet-shops/{enc}/keys  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The key record, including `key`.
+     *
+     * @throws GameApiException 404 not found, 409 shop_closed, 422 validation
+     */
+    public function issueBetShopKey(int $shopId, string $name): array
+    {
+        $enc = $this->encryptId($shopId);
+
+        return $this->makeRequest('POST', "/bet-shops/{$enc}/keys", ['name' => $name], timeout: 20, withIdempotencyKey: false)['data'] ?? [];
+    }
+
+    /**
+     * Revoke a shop key; it stops working at once.
+     * Endpoint: POST /api/v1/bet-shop-keys/{enc}/revoke  (rate limited: 30/min)
+     *
+     * @return array<string, mixed> The revoked key.
+     *
+     * @throws GameApiException 404 when it is not a shop key
+     */
+    public function revokeBetShopKey(int $keyId, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($keyId);
+
+        return $this->makeRequest('POST', "/bet-shop-keys/{$enc}/revoke", timeout: 20, idempotencyKey: $idempotencyKey)['data'] ?? [];
     }
 
     // -------------------------------------------------------------------------
