@@ -24,24 +24,6 @@ beforeEach(function (): void {
     Sleep::fake();
 });
 
-/**
- * Verify a sent request the way the site's VerifyBackofficeSignature middleware does.
- */
-function siteAcceptsSignature(Request $request, string $secret = 'test-secret'): bool
-{
-    $uri = $request->toPsrRequest()->getUri();
-    $requestUri = $uri->getPath().($uri->getQuery() !== '' ? '?'.$uri->getQuery() : '');
-    $expected = hash_hmac('sha256', implode('.', [
-        $request->header('X-Backoffice-Timestamp')[0],
-        $request->header('X-Backoffice-Request-Id')[0],
-        $request->method(),
-        $requestUri,
-        hash('sha256', $request->body()),
-    ]), $secret);
-
-    return hash_equals($expected, $request->header('X-Backoffice-Signature')[0]);
-}
-
 function suspendMarket(User $staff, ?string $requestId = null)
 {
     return app(SiteBackofficeClient::class)->write('POST', 'markets/42/suspend', ['reason' => 'Injury news'], $staff, 'SbMarket', 42, 'suspend', $requestId);
