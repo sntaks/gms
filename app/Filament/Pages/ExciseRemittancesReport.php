@@ -167,6 +167,36 @@ class ExciseRemittancesReport extends FinanceListReportPage
         ];
     }
 
+    /**
+     * The returns report that lists the months still owed.
+     */
+    protected function returnsReportKey(): string
+    {
+        return 'excise-duty/returns';
+    }
+
+    protected function recordDescription(): string
+    {
+        return 'Every unremitted excise charge in the period is attached to this payment and can no longer be refunded to the player.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function recordRemittance(array $data, string $idempotencyKey): array
+    {
+        return app(GameApiService::class)->recordExciseRemittance($data, $idempotencyKey);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function voidRemittance(int $remittanceId, string $reason, string $idempotencyKey): array
+    {
+        return app(GameApiService::class)->voidExciseRemittance($remittanceId, $reason, $idempotencyKey);
+    }
+
     protected function recordRemittanceAction(): Action
     {
         return Action::make('recordRemittance')
@@ -175,7 +205,7 @@ class ExciseRemittancesReport extends FinanceListReportPage
             ->color('primary')
             ->visible(fn (): bool => static::canRemit())
             ->modalHeading('Record a KRA remittance')
-            ->modalDescription('Every unremitted excise charge in the period is attached to this payment and can no longer be refunded to the player.')
+            ->modalDescription(fn (): string => $this->recordDescription())
             ->modalSubmitActionLabel('Record remittance')
             ->schema([
                 Hidden::make('idempotency_key')
@@ -223,7 +253,7 @@ class ExciseRemittancesReport extends FinanceListReportPage
             ])
             ->action(function (array $data, Action $action): void {
                 try {
-                    $remittance = app(GameApiService::class)->recordExciseRemittance($data, $data['idempotency_key']);
+                    $remittance = $this->recordRemittance($data, $data['idempotency_key']);
                 } catch (GameApiException $e) {
                     $this->handleWriteFailure($e, $action, 'Could not record the remittance');
 
@@ -264,7 +294,7 @@ class ExciseRemittancesReport extends FinanceListReportPage
             ])
             ->action(function (array $data, array $record, Action $action): void {
                 try {
-                    app(GameApiService::class)->voidExciseRemittance((int) $record['id'], trim($data['reason']), $data['idempotency_key']);
+                    $this->voidRemittance((int) $record['id'], trim($data['reason']), $data['idempotency_key']);
                 } catch (GameApiException $e) {
                     $this->handleWriteFailure($e, $action, 'Could not void the remittance');
 
@@ -289,7 +319,7 @@ class ExciseRemittancesReport extends FinanceListReportPage
     protected function outstandingReturns(): array
     {
         try {
-            $returns = app(GameApiService::class)->financeReport('excise-duty/returns', [
+            $returns = app(GameApiService::class)->financeReport($this->returnsReportKey(), [
                 'from' => today()->subMonths(11)->startOfMonth()->toDateString(),
                 'to' => today()->toDateString(),
             ]);

@@ -78,6 +78,7 @@ class RoleSeeder extends Seeder
             // Reports
             'reports.view',
             'excise-duty.remit',
+            'winnings-tax.remit',
 
             // Access Management
             'users.view',
@@ -175,7 +176,7 @@ class RoleSeeder extends Seeder
             'referral-withdrawals.settle', 'referral-codes.edit',
             'promo-codes.manage',
             'game-results.view', 'jackpot-results.view', 'tournament-results.view',
-            'reports.view', 'excise-duty.remit',
+            'reports.view', 'excise-duty.remit', 'winnings-tax.remit',
             'sportsbook.view', 'sportsbook.settle', 'sportsbook.jackpots',
             'predict.view', 'predict.settle',
             'games.view', 'wagers.void',
