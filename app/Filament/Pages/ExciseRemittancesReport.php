@@ -54,7 +54,7 @@ class ExciseRemittancesReport extends FinanceListReportPage
     {
         $user = auth()->user();
 
-        return ($user?->isAdmin() ?? false) && $user->hasPermissionTo('excise-duty.remit');
+        return ($user?->canViewFinanceReports() ?? false) && $user->hasPermissionTo('excise-duty.remit');
     }
 
     protected function reportKey(): string

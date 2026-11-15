@@ -83,6 +83,6 @@ class FinanceExportController extends Controller
             return $user->hasPermissionTo(self::REPORT_PERMISSIONS[$report]);
         }
 
-        return $user->isAdmin() && $user->hasPermissionTo('reports.view');
+        return $user->canViewFinanceReports();
     }
 }

@@ -43,9 +43,7 @@ abstract class FinanceReportPage extends BaseReportPage
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return ($user?->isAdmin() ?? false) && $user->hasPermissionTo('reports.view');
+        return auth()->user()?->canViewFinanceReports() ?? false;
     }
 
     /**
