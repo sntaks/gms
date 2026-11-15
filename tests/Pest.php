@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Tests\TestCase;
 
 /*
@@ -47,4 +48,34 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * Verify a request sent to the Kadi site's back office the way the site's
+ * VerifyBackofficeSignature middleware does (kadi docs/backoffice-api.md).
+ */
+function siteAcceptsSignature(Request $request, string $secret = 'test-secret'): bool
+{
+    $uri = $request->toPsrRequest()->getUri();
+    $requestUri = $uri->getPath().($uri->getQuery() !== '' ? '?'.$uri->getQuery() : '');
+    $expected = hash_hmac('sha256', implode('.', [
+        $request->header('X-Backoffice-Timestamp')[0] ?? '',
+        $request->header('X-Backoffice-Request-Id')[0] ?? '',
+        $request->method(),
+        $requestUri,
+        hash('sha256', $request->body()),
+    ]), $secret);
+
+    return hash_equals($expected, $request->header('X-Backoffice-Signature')[0] ?? '');
+}
+
+/**
+ * Point GMS at a fake Kadi site back office signed with `test-secret`.
+ */
+function useFakeSiteBackoffice(): void
+{
+    config([
+        'services.kadi_site.url' => 'https://kadi.test',
+        'services.kadi_site.secret' => 'test-secret',
+    ]);
 }

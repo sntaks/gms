@@ -2,6 +2,8 @@
 
 namespace App\Models\Site;
 
+use Database\Factories\Site\SbFixtureResultFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -9,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SbFixtureResult extends SiteModel
 {
+    /** @use HasFactory<SbFixtureResultFactory> */
+    use HasFactory;
+
     protected $table = 'sb_fixture_results';
 
     /**
