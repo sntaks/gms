@@ -989,6 +989,7 @@ class GameApiService
         'customers-top', 'cash-flow', 'income-statement', 'trial-balance', 'expenses', 'taxes',
         'excise-duty', 'excise-duty-charges', 'excise-duty-returns', 'excise-duty-remittances', 'disputes',
         'referral-bonuses', 'referral-withdrawals', 'promotions', 'bet-shops', 'bet-shop-loads', 'bet-shop-withdrawals',
+        'house-banked',
     ];
 
     /**
@@ -1576,6 +1577,122 @@ class GameApiService
      *
      * @var list<string>
      */
+    // ── Games catalogue, products, game keys and wagers ──────
+    // The games, products and wager-void routes keep no idempotency record: never resend a write.
+
+    /**
+     * Games with their products, by sort order.
+     * Endpoint: GET /api/v1/games?status=all
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listGames(string $status = 'all'): array
+    {
+        return $this->makeRequest('GET', '/games', query: ['status' => $status])['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: PUT /api/v1/games/{code} (name, launch_url, status, sort_order)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function updateGame(string $code, array $payload): array
+    {
+        return $this->makeRequest('PUT', '/games/'.rawurlencode($code), $payload)['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: GET /api/v1/products (optional game)
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listProducts(?string $game = null): array
+    {
+        return $this->makeRequest('GET', '/products', query: $this->withoutBlankFilters(['game' => $game]))['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: PUT /api/v1/products/{code} (name, status, min_stake, max_stake, max_payout — null
+     * removes a limit — and winnings_tax_rate 0–1)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function updateProduct(string $code, array $payload): array
+    {
+        return $this->makeRequest('PUT', '/products/'.rawurlencode($code), $payload)['data'] ?? [];
+    }
+
+    /**
+     * API keys (never the key itself).
+     * Endpoint: GET /api/v1/api-keys
+     *
+     * @param  array<string, mixed>  $filters  scope, game, active, page, per_page (max 200)
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listApiKeys(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/api-keys', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Issue a game key. The key is in the answer once (`key`) and never again; the API stores no
+     * response, so this call is never retried and carries no Idempotency-Key.
+     * Endpoint: POST /api/v1/games/{code}/keys (409 game_retired)
+     *
+     * @return array<string, mixed>
+     */
+    public function issueGameKey(string $code, string $name): array
+    {
+        return $this->makeRequest('POST', '/games/'.rawurlencode($code).'/keys', ['name' => $name], timeout: 20, withIdempotencyKey: false)['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: POST /api/v1/api-keys/{enc}/revoke (409 own_key)
+     *
+     * @return array<string, mixed>
+     */
+    public function revokeApiKey(int $keyId): array
+    {
+        return $this->makeRequest('POST', '/api-keys/'.$this->encryptId($keyId).'/revoke')['data'] ?? [];
+    }
+
+    /**
+     * Wagers across games, newest first.
+     * Endpoint: GET /api/v1/wagers
+     *
+     * @param  array<string, mixed>  $filters  game, product, status, customer, reference, from, to, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listWagers(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/wagers', query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * A wager with its settlements and ledger entries.
+     * Endpoint: GET /api/v1/wagers/{id}/detail
+     *
+     * @return array{wager?: array<string, mixed>, settlements?: list<array<string, mixed>>, ledger_entries?: list<array<string, mixed>>}
+     */
+    public function getWagerDetail(int $id): array
+    {
+        return $this->makeRequest('GET', "/wagers/{$id}/detail")['data'] ?? [];
+    }
+
+    /**
+     * Void an open wager and refund its stake (409 wager_not_open).
+     * Endpoint: POST /api/v1/wagers/{id}/void (reason, admin_user)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> The wager.
+     */
+    public function voidWager(int $id, array $payload): array
+    {
+        return $this->makeRequest('POST', "/wagers/{$id}/void", $payload)['data']['wager'] ?? [];
+    }
+
     // ── Prediction markets (admin) ───────────────────────────
     // Every write needs `admin_user` (StaffIdentity::adminUser()). The predict admin routes keep no
     // idempotency record, so a write that timed out must never be sent again blindly: reload the
