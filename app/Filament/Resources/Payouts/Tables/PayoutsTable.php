@@ -5,6 +5,8 @@ namespace App\Filament\Resources\Payouts\Tables;
 use App\Enums\ExpenseCategory;
 use App\Enums\PayoutStatus;
 use App\Filament\Exports\PayoutExporter;
+use App\Filament\Pages\ApiExpensesReport;
+use App\Jobs\RecordPayoutExpenseJob;
 use App\Models\Expense;
 use App\Models\Payout;
 use Filament\Actions\Action;
@@ -105,6 +107,20 @@ class PayoutsTable
                             ->state(fn (Payout $record): ?bool => in_array($record->status, [PayoutStatus::Pending, PayoutStatus::Failed], true)
                                 ? $record->requires_independent_approval
                                 : null),
+                        TextColumn::make('api_expense')
+                            ->label('Kadi API expense')
+                            ->badge()
+                            ->state(fn (Payout $record): ?string => $record->status !== PayoutStatus::Completed ? null : match (true) {
+                                $record->api_expense_id !== null => 'In the books',
+                                $record->api_expense_error !== null => 'Not recorded',
+                                default => 'Recording',
+                            })
+                            ->color(fn (?string $state): string => match ($state) {
+                                'In the books' => 'success',
+                                'Not recorded' => 'danger',
+                                default => 'gray',
+                            })
+                            ->tooltip(fn (Payout $record): ?string => $record->api_expense_error),
                     ])->space(1)->extraAttributes(['style' => 'flex: 1 1 0%; min-width: 0;']),
                 ])->from('md'),
                 Panel::make([
@@ -173,6 +189,27 @@ class PayoutsTable
                     }),
             ])
             ->recordActions([
+                Action::make('recordApiExpense')
+                    ->iconButton()
+                    ->icon(Heroicon::OutlinedBookOpen)
+                    ->color('warning')
+                    ->tooltip('Record in the Kadi API')
+                    ->visible(fn (Payout $record): bool => $record->status === PayoutStatus::Completed
+                        && $record->api_expense_id === null
+                        && ApiExpensesReport::canRecord())
+                    ->requiresConfirmation()
+                    ->modalHeading('Record this payout as a Kadi API expense')
+                    ->modalDescription(fn (Payout $record): string => 'KES '.number_format((float) $record->amount, 2).' as an "other" expense with reference '.RecordPayoutExpenseJob::reference($record->id).'. It can never be recorded twice.')
+                    ->action(function (Payout $record): void {
+                        abort_unless(ApiExpensesReport::canRecord(), 403);
+
+                        RecordPayoutExpenseJob::dispatchSync($record->id);
+                        $record->refresh();
+
+                        $record->api_expense_id !== null
+                            ? Notification::make()->title('Recorded in the Kadi API')->success()->send()
+                            : Notification::make()->title('Not recorded')->body($record->api_expense_error ?? 'The Kadi API did not record it.')->danger()->send();
+                    }),
                 ViewAction::make()
                     ->iconButton()
                     ->tooltip('View Payout')

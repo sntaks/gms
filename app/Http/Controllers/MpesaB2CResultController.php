@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\CompanyWithdrawStatus;
 use App\Enums\PayoutStatus;
 use App\Enums\WithdrawStatus;
+use App\Jobs\RecordPayoutExpenseJob;
 use App\Models\CompanyWithdraw;
 use App\Models\Payout;
 use App\Models\Withdraw;
@@ -66,6 +67,11 @@ class MpesaB2CResultController extends Controller
                 'response' => $resultDesc,
                 ...($resultCode == 0 ? ['processed_at' => now()] : []),
             ]);
+
+            // A paid payout is a company expense in the Kadi API's ledger.
+            if ($resultCode == 0) {
+                RecordPayoutExpenseJob::dispatch($payout->id);
+            }
         }
 
         return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Accepted']);

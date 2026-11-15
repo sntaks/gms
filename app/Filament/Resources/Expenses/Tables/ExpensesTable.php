@@ -4,16 +4,10 @@ namespace App\Filament\Resources\Expenses\Tables;
 
 use App\Enums\ExpenseCategory;
 use App\Filament\Exports\ExpenseExporter;
-use App\Filament\Imports\ExpenseImporter;
 use App\Models\Expense;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\ExportAction;
-use Filament\Actions\ImportAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Support\Enums\TextSize;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\Layout\Stack;
@@ -78,28 +72,13 @@ class ExpensesTable
                             ->when($data['until'], fn (Builder $q, $date) => $q->whereDate('created_at', '<=', $date));
                     }),
             ])
-            ->recordActions([
-                EditAction::make()
-                    ->iconButton()
-                    ->icon(Heroicon::OutlinedPencilSquare)
-                    ->color('warning')
-                    ->tooltip('Edit Expense'),
-            ])
+            // Read-only history: new expenses are recorded in the Kadi API (Finance Reports › API Expenses).
             ->toolbarActions([
-                ImportAction::make()
-                    ->label('Import Expenses')
-                    ->icon('hugeicons-file-import')
-                    ->color('info')
-                    ->importer(ExpenseImporter::class),
-
                 ExportAction::make()
                     ->label('Export Expenses')
                     ->icon('hugeicons-file-export')
                     ->color('success')
                     ->exporter(ExpenseExporter::class),
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
             ]);
     }
 }

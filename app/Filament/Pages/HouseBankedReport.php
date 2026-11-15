@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Concerns\FiltersFinanceByProduct;
 use App\Support\Format;
 use BackedEnum;
 
@@ -13,6 +14,8 @@ use BackedEnum;
  */
 class HouseBankedReport extends FinanceReportPage
 {
+    use FiltersFinanceByProduct;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-library';
 
     protected static ?string $navigationLabel = 'House-banked games';
@@ -23,6 +26,16 @@ class HouseBankedReport extends FinanceReportPage
     protected static ?int $navigationSort = 21;
 
     protected ?string $heading = 'House-banked games';
+
+    protected function extraFilters(): array
+    {
+        return ['product' => $this->product];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [...parent::getHeaderActions(), $this->productFilterAction()];
+    }
 
     protected function reportKey(): string
     {

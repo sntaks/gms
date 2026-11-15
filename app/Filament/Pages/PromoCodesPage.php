@@ -75,6 +75,8 @@ class PromoCodesPage extends Page implements HasTable
 
     protected ?string $heading = 'Promo Codes';
 
+    protected ?string $subheading = 'A code only gives the sign-up bonus while the bonus is switched on in the Kadi API (PROMOTIONS_SIGNUP_BONUS_ENABLED); it is switched there, not here.';
+
     protected string $view = 'filament.pages.promo-codes-page';
 
     #[Url(as: 'filters')]

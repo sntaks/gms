@@ -164,6 +164,8 @@ class DepositsPage extends FinanceListReportPage
                 'gift' => 'Gift',
                 'emoji' => 'Emoji',
                 'unmatched' => 'Unmatched',
+                'house_funding' => 'House funding',
+                'shop_float' => 'Shop float',
             ]),
             Filter::make('customer_id')
                 ->schema([

@@ -46,6 +46,7 @@ class UnmatchedDepositsPage extends Page implements HasTable
         'assigned' => 'Assigned',
         'refunded' => 'Refunded',
         'shop_float' => 'Shop float',
+        'house_funded' => 'House funding',
     ];
 
     /**
