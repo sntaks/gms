@@ -35,6 +35,17 @@ return [
         ],
     ],
 
+    /*
+     * The Kadi site's signed back-office API (kadi docs/backoffice-api.md). The
+     * secret is one of the site's BACKOFFICE_GMS_SECRETS; never log it.
+     */
+    'kadi_site' => [
+        'url' => env('KADI_SITE_BACKOFFICE_URL'),
+        'secret' => env('KADI_SITE_BACKOFFICE_SECRET'),
+        'timeout' => (int) env('KADI_SITE_BACKOFFICE_TIMEOUT', 20),
+        'connect_timeout' => (int) env('KADI_SITE_BACKOFFICE_CONNECT_TIMEOUT', 5),
+    ],
+
     'game_api' => [
         'url' => env('GAME_API_URL'),
         'key' => env('GAME_API_KEY'),

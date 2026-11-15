@@ -28,6 +28,14 @@ abstract class TestCase extends BaseTestCase
             );
         }
 
+        // The Kadi site's database is never reached from tests: Tests\Support\SiteSchema builds its tables here.
+        $app['config']->set('database.connections.kadi_site', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+        ]);
+
         return $app;
     }
 

@@ -9,3 +9,8 @@ it('ignores the application caches that could override the test environment', fu
     expect(app()->getCachedConfigPath())->toEndWith('config.testing.php')
         ->and(app()->configurationIsCached())->toBeFalse();
 });
+
+it('never reaches the Kadi site database from tests', function (): void {
+    expect(config('database.connections.kadi_site.driver'))->toBe('sqlite')
+        ->and(config('database.connections.kadi_site.database'))->toBe(':memory:');
+});
