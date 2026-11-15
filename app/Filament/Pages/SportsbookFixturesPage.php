@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\Widgets\OddsApiCreditsWidget;
 use App\Models\Site\SbCompetition;
 use App\Models\Site\SbFixture;
 use App\Models\Site\SbSport;
@@ -57,6 +58,14 @@ class SportsbookFixturesPage extends Page implements HasTable
     public static function canAccess(): bool
     {
         return auth()->user()?->hasPermissionTo('sportsbook.view') ?? false;
+    }
+
+    /**
+     * @return array<class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [OddsApiCreditsWidget::class];
     }
 
     public function mount(): void

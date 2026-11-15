@@ -1,13 +1,11 @@
 <?php
 
-use App\Enums\UserStatus;
 use App\Filament\Pages\SportsbookFixtureDetailPage;
 use App\Models\AuditLog;
 use App\Models\Site\SbFixture;
 use App\Models\Site\SbFixtureResult;
 use App\Models\Site\SbMarket;
 use App\Models\Site\SbSelection;
-use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -26,15 +24,6 @@ beforeEach(function (): void {
     Http::preventStrayRequests();
     Sleep::fake();
 });
-
-function signInAs(string $role): User
-{
-    $user = User::factory()->create(['status' => UserStatus::Active->value, 'name' => 'Jane Trader']);
-    $user->assignRole($role);
-    test()->actingAs($user);
-
-    return $user;
-}
 
 /**
  * Arsenal v Chelsea with a three-way 1X2 market, kicked off 30 minutes ago.
@@ -63,7 +52,7 @@ function siteWrites(): AuditLog
 }
 
 it('shows the markets with staff-readable labels, reasons and prices', function (): void {
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea('suspended');
     SbMarket::factory()->create(['fixture_id' => $fixture->id, 'type' => 'spreads', 'line' => '-1.50']);
     $winner = SbMarket::factory()->create(['fixture_id' => $fixture->id]);
@@ -78,7 +67,7 @@ it('shows the markets with staff-readable labels, reasons and prices', function 
 });
 
 it('suspends a market through the signed back office and audits it', function (): void {
-    $trader = signInAs('trader');
+    $trader = signInWithRole('trader', ['name' => 'Jane Trader']);
     [$fixture, $market] = arsenalChelsea();
     Http::fake([BACKOFFICE."markets/{$market->id}/suspend" => Http::response(['status' => 'ok', 'data' => ['market' => $market->id, 'status' => 'suspended']])]);
 
@@ -97,7 +86,7 @@ it('suspends a market through the signed back office and audits it', function ()
 });
 
 it('shows the site\'s reason when a market cannot be reopened', function (): void {
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
     [$fixture, $market] = arsenalChelsea('suspended');
     Http::fake([BACKOFFICE."markets/{$market->id}/reopen" => Http::response([
         'message' => 'Its odds are stale.',
@@ -113,7 +102,7 @@ it('shows the site\'s reason when a market cannot be reopened', function (): voi
 });
 
 it('overrides some prices and clears the others', function (): void {
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
     [$fixture, $market] = arsenalChelsea();
     [$home, $draw, $away] = $market->selections()->orderBy('id')->get()->all();
     Http::fake([BACKOFFICE."markets/{$market->id}/prices" => Http::response(['status' => 'ok', 'data' => ['market' => $market->id, 'selections' => []]])]);
@@ -132,7 +121,7 @@ it('overrides some prices and clears the others', function (): void {
 });
 
 it('refuses a price of 1.00 or less before calling the site', function (): void {
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
     [$fixture, $market] = arsenalChelsea();
     $home = $market->selections()->where('outcome', 'home')->sole();
     Http::fake();
@@ -145,7 +134,7 @@ it('refuses a price of 1.00 or less before calling the site', function (): void 
 });
 
 it('records a result and reports what it settled', function (): void {
-    $finance = signInAs('finance');
+    $finance = signInWithRole('finance', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea();
     Http::fake([BACKOFFICE."fixtures/{$fixture->id}/result" => Http::response(['status' => 'ok', 'data' => ['legs_decided' => 14, 'bets_settled' => 9]])]);
 
@@ -163,7 +152,7 @@ it('records a result and reports what it settled', function (): void {
 });
 
 it('voids a match without scores', function (): void {
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea();
     Http::fake([BACKOFFICE."fixtures/{$fixture->id}/result" => Http::response(['status' => 'ok', 'data' => ['legs_decided' => 3, 'bets_settled' => 3]])]);
 
@@ -176,7 +165,7 @@ it('voids a match without scores', function (): void {
 });
 
 it('warns that a second result corrects the first and audits it as a correction', function (): void {
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea();
     SbFixtureResult::factory()->create(['fixture_id' => $fixture->id, 'home_score' => 1, 'away_score' => 1]);
     Http::fake([BACKOFFICE."fixtures/{$fixture->id}/result" => Http::response(['status' => 'ok', 'data' => ['legs_decided' => 2, 'bets_settled' => 2]])]);
@@ -192,7 +181,7 @@ it('warns that a second result corrects the first and audits it as a correction'
 });
 
 it('puts the site\'s validation message on the score field', function (): void {
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea();
     Http::fake([BACKOFFICE."fixtures/{$fixture->id}/result" => Http::response([
         'message' => 'The home score may not be greater than 99.',
@@ -206,7 +195,7 @@ it('puts the site\'s validation message on the score field', function (): void {
 });
 
 it('keeps the modal open with the same request id when the site does not answer', function (): void {
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     [$fixture] = arsenalChelsea();
     Http::fakeSequence(BACKOFFICE."fixtures/{$fixture->id}/result")
         ->pushFailedConnection()
@@ -234,13 +223,13 @@ it('keeps the modal open with the same request id when the site does not answer'
 it('lets traders trade but not settle, and finance settle but not trade', function (): void {
     [$fixture, $market] = arsenalChelsea();
 
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
     Livewire::test(SportsbookFixtureDetailPage::class, ['fixture' => $fixture->id])
         ->assertActionVisible(TestAction::make('suspendMarket')->table($market))
         ->assertActionVisible(TestAction::make('overridePrices')->table($market))
         ->assertActionHidden('recordResult');
 
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     Livewire::test(SportsbookFixtureDetailPage::class, ['fixture' => $fixture->id])
         ->assertActionHidden(TestAction::make('suspendMarket')->table($market))
         ->assertActionHidden(TestAction::make('overridePrices')->table($market))
@@ -248,7 +237,7 @@ it('lets traders trade but not settle, and finance settle but not trade', functi
 });
 
 it('offers no result before kick-off', function (): void {
-    signInAs('finance');
+    signInWithRole('finance', ['name' => 'Jane Trader']);
     $fixture = SbFixture::factory()->create(['kicks_off_at' => now()->addHour()]);
 
     Livewire::test(SportsbookFixtureDetailPage::class, ['fixture' => $fixture->id])
@@ -256,7 +245,7 @@ it('offers no result before kick-off', function (): void {
 });
 
 it('returns not found for a fixture that does not exist', function (): void {
-    signInAs('trader');
+    signInWithRole('trader', ['name' => 'Jane Trader']);
 
     get(SportsbookFixtureDetailPage::getUrl(['fixture' => 999]))->assertNotFound();
 });
