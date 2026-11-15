@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Concerns\FiltersFinanceByProduct;
 use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Support\Format;
 use BackedEnum;
@@ -9,6 +10,8 @@ use UnitEnum;
 
 class IncomeStatementReport extends FinanceReportPage
 {
+    use FiltersFinanceByProduct;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-scale';
 
     protected static ?string $navigationLabel = 'Income Statement';
@@ -18,6 +21,16 @@ class IncomeStatementReport extends FinanceReportPage
     protected static string|UnitEnum|null $navigationGroup = FinanceReportsCluster::OVERVIEW;
 
     protected ?string $heading = 'Income Statement';
+
+    protected function extraFilters(): array
+    {
+        return ['product' => $this->product];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [...parent::getHeaderActions(), $this->productFilterAction()];
+    }
 
     protected function reportKey(): string
     {

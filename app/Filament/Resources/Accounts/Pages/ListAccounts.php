@@ -65,6 +65,18 @@ class ListAccounts extends Page implements HasTable
                     ->label('Wallet Balance')
                     ->sortable()
                     ->formatStateUsing(fn ($state): string => Format::money($state)),
+                TextColumn::make('shop_loads')
+                    ->label('Shop loads')
+                    ->alignEnd()
+                    ->toggleable()
+                    ->formatStateUsing(fn ($state): string => Format::money($state))
+                    ->placeholder('—'),
+                TextColumn::make('shop_withdrawals')
+                    ->label('Shop withdrawals')
+                    ->alignEnd()
+                    ->toggleable()
+                    ->formatStateUsing(fn ($state): string => Format::money($state))
+                    ->placeholder('—'),
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()

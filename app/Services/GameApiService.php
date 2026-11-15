@@ -1117,6 +1117,43 @@ class GameApiService
     }
 
     /**
+     * Record a company expense in the Kadi API's ledger (it feeds the income statement). A reference
+     * may be used only once among active expenses (422 when taken).
+     * Endpoint: POST /api/v1/finance/expenses
+     *
+     * @param  array{expense_date: string, category: string, amount: float|int|string, description?: ?string, reference?: ?string}  $data
+     * @return array<string, mixed> The new expense.
+     */
+    public function recordExpense(array $data, string $idempotencyKey): array
+    {
+        $body = collect($data)
+            ->only(['expense_date', 'category', 'amount', 'description', 'reference'])
+            ->reject(fn ($value): bool => $value === null || $value === '')
+            ->all();
+
+        $expense = $this->makeRequest('POST', '/finance/expenses', $body, timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $expense;
+    }
+
+    /**
+     * Void an expense entered in error; expenses are never edited (404, 409 already voided).
+     * Endpoint: POST /api/v1/finance/expenses/{enc}/void (reason 3–255)
+     *
+     * @return array<string, mixed>
+     */
+    public function voidExpense(int $expenseId, string $reason, string $idempotencyKey): array
+    {
+        $expense = $this->makeRequest('POST', '/finance/expenses/'.$this->encryptId($expenseId).'/void', ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $expense;
+    }
+
+    /**
      * Void a house funding entered in error (409 insufficient_house_balance, already_resolved).
      * Endpoint: POST /api/v1/finance/house-funding/{enc}/void
      *

@@ -36,6 +36,7 @@ class LedgerReport extends FinanceListReportPage
             'wallet_type' => $this->filterValue('wallet_type'),
             'status' => $this->filterValue('status'),
             'customer_id' => $this->tableFilters['customer']['customer_id'] ?? null,
+            'product' => $this->filterValue('product'),
         ];
     }
 
@@ -115,15 +116,23 @@ class LedgerReport extends FinanceListReportPage
     protected function tableFilterDefinitions(): array
     {
         return [
+            // api config finance.entry_types categories and LedgerEntry wallet types.
             SelectFilter::make('category')->options(collect([
                 'cash_in', 'cash_out', 'stake', 'payout', 'house_revenue', 'refund', 'adjustment', 'transfer', 'escrow_movement', 'coin',
+                'tax_withheld', 'referral_bonus', 'referral_payout', 'promotion', 'capital', 'shop_float', 'shop_load', 'shop_cash_out', 'house_banked_win',
             ])->mapWithKeys(fn (string $key): array => [$key => str($key)->replace('_', ' ')->title()->toString()])->all()),
             SelectFilter::make('wallet_type')->options([
                 'wallet' => 'Customer wallet',
                 'game_wallet' => 'Game wallet',
                 'competition_wallet' => 'Competition wallet',
                 'coin_wallet' => 'Coin wallet',
+                'dispute' => 'Dispute escrow',
+                'referral' => 'Referral wallet',
+                'bet_shop' => 'Bet shop float',
+                'shop_withdrawal' => 'Shop withdrawal',
+                'wager' => 'Open wagers',
             ]),
+            SelectFilter::make('product')->options(fn (): array => IncomeStatementReport::productOptions()),
             SelectFilter::make('status')->options(['settled' => 'Settled', 'reversed' => 'Reversed']),
             Filter::make('customer')
                 ->schema([TextInput::make('customer_id')->label('Customer ID')->numeric()])
