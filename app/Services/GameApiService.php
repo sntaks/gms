@@ -1623,7 +1623,7 @@ class GameApiService
      */
     public function updatePredictMarket(int $id, array $payload): array
     {
-        return $this->makeRequest('PUT', "/predict/admin/markets/{$id}", $payload)['data'] ?? [];
+        return $this->unwrapPredictMarket($this->makeRequest('PUT', "/predict/admin/markets/{$id}", $payload)['data'] ?? []);
     }
 
     /**
@@ -1639,7 +1639,18 @@ class GameApiService
             throw new \InvalidArgumentException("[{$action}] is not a prediction market action.");
         }
 
-        return $this->makeRequest('POST', "/predict/admin/markets/{$id}/{$action}", $payload)['data'] ?? [];
+        return $this->unwrapPredictMarket($this->makeRequest('POST', "/predict/admin/markets/{$id}/{$action}", $payload)['data'] ?? []);
+    }
+
+    /**
+     * Updates and lifecycle actions answer `{market: {...}, replayed}`; show and store answer the market itself.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function unwrapPredictMarket(array $data): array
+    {
+        return is_array($data['market'] ?? null) ? $data['market'] : $data;
     }
 
     public const PREDICT_MARKET_ACTIONS = ['publish', 'reject', 'suspend', 'resume', 'close', 'resolve', 'void'];
@@ -1659,6 +1670,167 @@ class GameApiService
         }
 
         return $this->makeRequest('POST', "/predict/admin/markets/bulk/{$action}", $payload, timeout: 45)['data'] ?? [];
+    }
+
+    /**
+     * Queue a failed settlement or refund run again (only unsettled wagers are touched).
+     * Endpoint: POST /api/v1/predict/admin/settlements/{id}/retry (409 settlement_not_retryable)
+     *
+     * @param  array<string, mixed>  $payload  admin_user
+     * @return array<string, mixed> The settlement run.
+     */
+    public function retryPredictSettlement(int $settlementId, array $payload): array
+    {
+        return $this->makeRequest('POST', "/predict/admin/settlements/{$settlementId}/retry", $payload)['data']['settlement'] ?? [];
+    }
+
+    /**
+     * Players kept from betting on one market.
+     * Endpoint: GET /api/v1/predict/admin/markets/{id}/blocks
+     *
+     * @return list<array{customer_id: int, reason: string|null, admin_user: string|null, created_at: string|null}>
+     */
+    public function listPredictBlocks(int $marketId): array
+    {
+        return $this->makeRequest('GET', "/predict/admin/markets/{$marketId}/blocks")['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: POST /api/v1/predict/admin/markets/{id}/blocks (customer_id, reason)
+     *
+     * @param  array<string, mixed>  $payload  admin_user, customer_id, reason
+     * @return array<string, mixed>
+     */
+    public function blockPredictCustomer(int $marketId, array $payload): array
+    {
+        return $this->makeRequest('POST', "/predict/admin/markets/{$marketId}/blocks", $payload)['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: DELETE /api/v1/predict/admin/markets/{id}/blocks/{customerId} (404 block_not_found)
+     *
+     * @param  array<string, mixed>  $payload  admin_user, reason (optional)
+     * @return array<string, mixed>
+     */
+    public function unblockPredictCustomer(int $marketId, int $customerId, array $payload): array
+    {
+        return $this->makeRequest('DELETE', "/predict/admin/markets/{$marketId}/blocks/{$customerId}", $payload)['data'] ?? [];
+    }
+
+    /**
+     * Polymarket results waiting for an admin (status pending by default).
+     * Endpoint: GET /api/v1/predict/admin/proposals
+     *
+     * @param  array<string, mixed>  $filters  status, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listPredictProposals(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/proposals', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * confirm (resolves the market on the proposed result) or reject (`reason`).
+     * Endpoint: POST /api/v1/predict/admin/proposals/{id}/{confirm|reject} (409 proposal_not_pending)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> The proposal.
+     */
+    public function predictProposalAction(int $proposalId, string $action, array $payload): array
+    {
+        if (! in_array($action, ['confirm', 'reject'], true)) {
+            throw new \InvalidArgumentException("[{$action}] is not a proposal action.");
+        }
+
+        return $this->makeRequest('POST', "/predict/admin/proposals/{$proposalId}/{$action}", $payload)['data']['proposal'] ?? [];
+    }
+
+    /**
+     * Ask for a settled market's result to be corrected; a different admin must approve.
+     * Endpoint: POST /api/v1/predict/admin/markets/{id}/corrections (result, reason;
+     * 409 market_not_settled, same_result, correction_open)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> The correction.
+     */
+    public function requestPredictCorrection(int $marketId, array $payload): array
+    {
+        return $this->makeRequest('POST', "/predict/admin/markets/{$marketId}/corrections", $payload)['data']['correction'] ?? [];
+    }
+
+    /**
+     * Endpoint: GET /api/v1/predict/admin/corrections
+     *
+     * @param  array<string, mixed>  $filters  status, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listPredictCorrections(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/corrections', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * approve (a different admin; 403 same_admin), cancel (`reason`) or retry (failed only).
+     * Endpoint: POST /api/v1/predict/admin/corrections/{id}/{approve|cancel|retry}
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> The correction.
+     */
+    public function predictCorrectionAction(int $correctionId, string $action, array $payload): array
+    {
+        if (! in_array($action, ['approve', 'cancel', 'retry'], true)) {
+            throw new \InvalidArgumentException("[{$action}] is not a correction action.");
+        }
+
+        return $this->makeRequest('POST', "/predict/admin/corrections/{$correctionId}/{$action}", $payload)['data']['correction'] ?? [];
+    }
+
+    /**
+     * Risk flags raised by prediction bets, newest first; unresolved only unless resolved=1.
+     * Endpoint: GET /api/v1/predict/admin/risk-events
+     *
+     * @param  array<string, mixed>  $filters  resolved, type, customer_id, market_id, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listPredictRiskEvents(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/risk-events', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: POST /api/v1/predict/admin/risk-events/{id}/resolve (reason; 409 risk_event_resolved)
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> The risk event.
+     */
+    public function resolvePredictRiskEvent(int $riskEventId, array $payload): array
+    {
+        return $this->makeRequest('POST', "/predict/admin/risk-events/{$riskEventId}/resolve", $payload)['data']['risk_event'] ?? [];
+    }
+
+    /**
+     * Every admin write on prediction markets, newest first.
+     * Endpoint: GET /api/v1/predict/admin/audit
+     *
+     * @param  array<string, mixed>  $filters  market_id, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function predictAudit(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/audit', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Per-market stakes and results: settled markets show payouts, house net, cut and seed result;
+     * quoted markets show payouts per side and the worst case.
+     * Endpoint: GET /api/v1/predict/admin/reports/markets
+     *
+     * @param  array<string, mixed>  $filters  status, category, source, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function predictReport(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/reports/markets', query: $this->withoutBlankFilters($filters), timeout: 30)['data'] ?? [];
     }
 
     /**

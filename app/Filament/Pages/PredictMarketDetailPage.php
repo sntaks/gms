@@ -9,7 +9,9 @@ use App\Support\Format;
 use App\Support\PredictMarketForm;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -34,6 +36,10 @@ class PredictMarketDetailPage extends Page
     public const RESOLVE_WARNING = 'Resolving pays every winning bet at once; there is no dispute window. A wrong result can only be fixed by a correction, which needs a second admin.';
 
     public const VOID_WARNING = 'Voiding refunds every stake and is final.';
+
+    public const CORRECTION_WARNING = 'A different admin must approve it. Approved, every bet is settled again on the new result; players paid on the old one can go below zero.';
+
+    public const SETTLEMENT_RETRY_WARNING = 'Only wagers not yet settled are touched, so nobody is paid twice.';
 
     /**
      * Lifecycle actions and the statuses they apply to (api MarketService transitions).
@@ -69,6 +75,11 @@ class PredictMarketDetailPage extends Page
     public array $details = [];
 
     public bool $apiError = false;
+
+    /**
+     * @var list<array<string, mixed>>|null
+     */
+    protected ?array $blocks = null;
 
     public static function canAccess(): bool
     {
@@ -110,7 +121,38 @@ class PredictMarketDetailPage extends Page
 
     protected function afterPredictWrite(): void
     {
+        $this->blocks = null;
         $this->loadMarket();
+    }
+
+    /**
+     * Players kept from betting on this market (empty when they cannot be read).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function blocks(): array
+    {
+        if ($this->blocks !== null) {
+            return $this->blocks;
+        }
+
+        try {
+            return $this->blocks = array_values(app(GameApiService::class)->listPredictBlocks((int) $this->market));
+        } catch (GameApiException $e) {
+            Log::warning('Prediction market blocks failed', ['market' => $this->market, 'error' => $e->getMessage()]);
+
+            return $this->blocks = [];
+        }
+    }
+
+    /**
+     * The latest settlement or refund run that failed, if any.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function failedSettlement(): ?array
+    {
+        return collect($this->details['settlements'] ?? [])->where('status', 'failed')->sortByDesc('run_no')->first();
     }
 
     public function status(): ?string
@@ -174,6 +216,13 @@ class PredictMarketDetailPage extends Page
                     ($external['closed'] ?? false) ? 'Closed on Polymarket' : null,
                 ])),
                 'external_url' => $market['external_url'] ?? null,
+                'settlements' => collect($market['settlements'] ?? [])->map(fn (array $run): string => '#'.($run['run_no'] ?? '?').' '.($run['kind'] ?? '')
+                    .(isset($run['result']) ? ' '.$this->sideLabel((string) $run['result']) : '').': '.($run['status'] ?? '?')
+                    .' · '.($run['winners_count'] ?? 0).' winners, paid '.Format::money($run['payouts'] ?? 0).', house '.Format::money($run['house_net'] ?? 0)
+                    .(isset($run['final_multiplier']) ? ', '.number_format((float) $run['final_multiplier'], 2).'x' : '')
+                    .(filled($run['error'] ?? null) ? ' · error: '.$run['error'] : ''))->values()->all(),
+                'blocks' => collect(($market['status'] ?? null) === 'draft' ? [] : $this->blocks())->map(fn (array $block): string => 'Customer #'.($block['customer_id'] ?? '?')
+                    .(filled($block['reason'] ?? null) ? ': '.$block['reason'] : '').(filled($block['admin_user'] ?? null) ? ' (by '.$block['admin_user'].')' : ''))->values()->all(),
                 'history' => implode(' · ', array_filter([
                     isset($market['created_by']) ? 'Created by '.$market['created_by'] : null,
                     isset($market['opened_at']) ? 'opened '.Format::dateTime($market['opened_at']) : null,
@@ -224,6 +273,12 @@ class PredictMarketDetailPage extends Page
                         TextEntry::make('external')->hiddenLabel(),
                         TextEntry::make('external_url')->label('On Polymarket')->url(fn (?string $state): ?string => $state)->openUrlInNewTab()->placeholder('—'),
                     ]),
+                Section::make('Settlement runs')
+                    ->visible(($market['settlements'] ?? []) !== [])
+                    ->schema([TextEntry::make('settlements')->hiddenLabel()->listWithLineBreaks()]),
+                Section::make('Blocked players')
+                    ->visible(($market['status'] ?? null) !== 'draft')
+                    ->schema([TextEntry::make('blocks')->hiddenLabel()->listWithLineBreaks()->placeholder('Nobody is blocked from this market.')]),
                 Section::make('History')
                     ->schema([TextEntry::make('history')->hiddenLabel()->placeholder('—')]),
             ]);
@@ -268,6 +323,15 @@ class PredictMarketDetailPage extends Page
                 description: PredictMarketsPage::BULK_REJECT_WARNING),
             $this->lifecycleAction('void', 'Void', 'heroicon-o-no-symbol', 'danger', manage: false, reason: true,
                 description: self::VOID_WARNING),
+            $this->retrySettlementAction(),
+            $this->requestCorrectionAction(),
+            $this->blockCustomerAction(),
+            $this->unblockCustomerAction(),
+            Action::make('auditLog')
+                ->label('Audit log')
+                ->icon('heroicon-o-clipboard-document-check')
+                ->color('gray')
+                ->url(fn (): string => PredictAuditPage::getUrl(['market' => (int) $this->market])),
             Action::make('reload')
                 ->label('Refresh')
                 ->icon('heroicon-o-arrow-path')
@@ -339,6 +403,127 @@ class PredictMarketDetailPage extends Page
 
                 if ($result !== null) {
                     Notification::make()->title('Resolved: '.$this->sideLabel((string) $data['result']))->body('Winning bets are being paid.')->success()->send();
+                    $this->afterPredictWrite();
+                }
+            });
+    }
+
+    protected function retrySettlementAction(): Action
+    {
+        return Action::make('retrySettlement')
+            ->label('Retry settlement')
+            ->icon('heroicon-o-arrow-path')
+            ->color('warning')
+            ->visible(fn (): bool => static::canSettlePredict() && $this->failedSettlement() !== null)
+            ->requiresConfirmation()
+            ->modalHeading(fn (): string => 'Retry settlement run #'.($this->failedSettlement()['run_no'] ?? '?').'?')
+            ->modalDescription(fn (): string => self::SETTLEMENT_RETRY_WARNING.' Last error: '.($this->failedSettlement()['error'] ?? 'none recorded').'.')
+            ->modalSubmitActionLabel('Retry')
+            ->action(function (Action $action): void {
+                abort_unless(static::canSettlePredict(), 403);
+
+                $run = $this->failedSettlement();
+
+                if ($run === null) {
+                    return;
+                }
+
+                $payload = ['admin_user' => static::adminUser()];
+                $result = $this->sendPredictWrite($action, fn (): array => app(GameApiService::class)->retryPredictSettlement((int) $run['id'], $payload), 'PredictSettlement', (int) $run['id'], 'retry', $payload, 'Could not retry the settlement');
+
+                if ($result !== null) {
+                    Notification::make()->title('Settlement queued again')->success()->send();
+                    $this->afterPredictWrite();
+                }
+            });
+    }
+
+    protected function requestCorrectionAction(): Action
+    {
+        return Action::make('requestCorrection')
+            ->label('Request correction')
+            ->icon('heroicon-o-arrow-uturn-left')
+            ->color('danger')
+            ->visible(fn (): bool => static::canSettlePredict() && $this->status() === 'settled')
+            ->modalHeading(fn (): string => 'Correct the result of: '.$this->getTitle())
+            ->modalDescription(self::CORRECTION_WARNING)
+            ->modalSubmitActionLabel('Request correction')
+            ->fillForm(fn (): array => ['result' => ($this->details['result'] ?? null) === 'yes' ? 'no' : 'yes'])
+            ->schema(fn (): array => [
+                Radio::make('result')
+                    ->label('Correct result')
+                    ->options(['yes' => $this->sideLabel('yes'), 'no' => $this->sideLabel('no')])
+                    ->required(),
+                Textarea::make('reason')->required()->maxLength(255)->rows(2),
+            ])
+            ->action(function (array $data, Action $action): void {
+                abort_unless(static::canSettlePredict(), 403);
+
+                $id = (int) $this->market;
+                $payload = ['admin_user' => static::adminUser(), 'result' => $data['result'], 'reason' => trim($data['reason'])];
+                $result = $this->sendPredictWrite($action, fn (): array => app(GameApiService::class)->requestPredictCorrection($id, $payload), 'PredictCorrection', $id, 'request', $payload, 'Could not request the correction', ['result' => 'result', 'reason' => 'reason']);
+
+                if ($result !== null) {
+                    Notification::make()->title('Correction requested')->body('A different admin must approve it under Predictions › Corrections.')->success()->send();
+                    $this->afterPredictWrite();
+                }
+            });
+    }
+
+    protected function blockCustomerAction(): Action
+    {
+        return Action::make('blockCustomer')
+            ->label('Block a player')
+            ->icon('heroicon-o-user-minus')
+            ->color('gray')
+            ->visible(fn (): bool => static::canManagePredict() && ! in_array($this->status(), ['draft', 'rejected'], true))
+            ->modalHeading('Block a player from this market')
+            ->modalDescription('They can no longer bet on it. Bets already placed stand.')
+            ->modalSubmitActionLabel('Block')
+            ->schema([
+                TextInput::make('customer_id')->label('Kadi API customer id')->integer()->minValue(1)->required(),
+                Textarea::make('reason')->required()->maxLength(255)->rows(2),
+            ])
+            ->action(function (array $data, Action $action): void {
+                abort_unless(static::canManagePredict(), 403);
+
+                $id = (int) $this->market;
+                $payload = ['admin_user' => static::adminUser(), 'customer_id' => (int) $data['customer_id'], 'reason' => trim($data['reason'])];
+                $result = $this->sendPredictWrite($action, fn (): array => app(GameApiService::class)->blockPredictCustomer($id, $payload), 'PredictMarket', $id, 'block', $payload, 'Could not block the player', ['customer_id' => 'customer_id', 'reason' => 'reason']);
+
+                if ($result !== null) {
+                    Notification::make()->title('Customer #'.$payload['customer_id'].' blocked')->success()->send();
+                    $this->afterPredictWrite();
+                }
+            });
+    }
+
+    protected function unblockCustomerAction(): Action
+    {
+        return Action::make('unblockCustomer')
+            ->label('Unblock a player')
+            ->icon('heroicon-o-user-plus')
+            ->color('gray')
+            ->visible(fn (): bool => static::canManagePredict() && ! in_array($this->status(), ['draft', 'rejected'], true) && $this->blocks() !== [])
+            ->modalHeading('Unblock a player')
+            ->modalSubmitActionLabel('Unblock')
+            ->schema(fn (): array => [
+                Select::make('customer_id')
+                    ->label('Player')
+                    ->options(collect($this->blocks())->mapWithKeys(fn (array $block): array => [(int) $block['customer_id'] => 'Customer #'.$block['customer_id']])->all())
+                    ->required(),
+                Textarea::make('reason')->maxLength(255)->rows(2),
+            ])
+            ->action(function (array $data, Action $action): void {
+                abort_unless(static::canManagePredict(), 403);
+
+                $id = (int) $this->market;
+                $customerId = (int) $data['customer_id'];
+                $payload = array_filter(['admin_user' => static::adminUser(), 'reason' => filled($data['reason'] ?? null) ? trim($data['reason']) : null]);
+                $result = $this->sendPredictWrite($action, fn (): array => app(GameApiService::class)->unblockPredictCustomer($id, $customerId, $payload), 'PredictMarket', $id, 'unblock', [...$payload, 'customer_id' => $customerId], 'Could not unblock the player');
+
+                if ($result !== null) {
+                    Notification::make()->title('Customer #'.$customerId.' unblocked')->success()->send();
                     $this->afterPredictWrite();
                 }
             });

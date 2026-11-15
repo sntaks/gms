@@ -18,6 +18,8 @@ beforeEach(function (): void {
     $this->artisan('db:seed', ['--class' => 'RoleSeeder']);
     config(['services.game_api.url' => 'https://game-api.test', 'services.game_api.key' => 'test-api-key']);
     Http::preventStrayRequests();
+    // The market page lists blocked players; nobody is blocked in these tests.
+    Http::fake([PREDICT.'/*/blocks' => Http::response(['success' => true, 'data' => []])]);
     travelTo('2026-11-16 09:00:00');
 });
 
@@ -176,7 +178,7 @@ it('stops a bulk run without resending when the Kadi API does not answer', funct
 it('resolves a closed market for one side and pays out', function (): void {
     $finance = signInWithRole('finance', ['name' => 'Fatuma Finance']);
     Http::fake([
-        PREDICT.'/42/resolve' => Http::response(['success' => true, 'data' => predictMarket(['status' => 'resolved', 'result' => 'yes'])]),
+        PREDICT.'/42/resolve' => Http::response(['success' => true, 'data' => ['market' => predictMarket(['status' => 'resolved', 'result' => 'yes']), 'replayed' => false]]),
         PREDICT.'/42' => Http::response(['success' => true, 'data' => predictMarket(['status' => 'closed'])]),
     ]);
 
@@ -233,7 +235,7 @@ it('sends only what may change on a live market', function (): void {
     Http::fake([
         PREDICT.'/42' => Http::sequence()
             ->push(['success' => true, 'data' => predictMarket()])
-            ->push(['success' => true, 'data' => predictMarket(['question' => 'Will Kenya qualify for AFCON 2027?'])])
+            ->push(['success' => true, 'data' => ['market' => predictMarket(['question' => 'Will Kenya qualify for AFCON 2027?']), 'replayed' => false]])
             ->push(['success' => true, 'data' => predictMarket(['question' => 'Will Kenya qualify for AFCON 2027?'])]),
     ]);
 
@@ -250,6 +252,20 @@ it('sends only what may change on a live market', function (): void {
         && ! isset($request['resolution_criteria'])
         && ! isset($request['cut'])
         && ! isset($request['start_probability']));
+});
+
+it('reports the market\'s new status from the Kadi API\'s answer', function (): void {
+    signInWithRole('admin');
+    Http::fake([
+        PREDICT.'/42/suspend' => Http::response(['success' => true, 'data' => ['market' => predictMarket(['status' => 'suspended']), 'replayed' => false]]),
+        PREDICT.'/42' => Http::response(['success' => true, 'data' => predictMarket()]),
+    ]);
+
+    Livewire::test(PredictMarketDetailPage::class, ['market' => 42])
+        ->callAction('suspendMarket')
+        ->assertNotified('Market: Suspended');
+
+    expect(predictAudit()->new_values['response']['status'])->toBe('suspended');
 });
 
 it('needs a reason to void', function (): void {
