@@ -112,6 +112,13 @@ class RoleSeeder extends Seeder
             'games.manage',
             'wagers.void',
             'api-keys.manage',
+
+            // Compliance (Kadi API)
+            'withdrawal-approvals.view',
+            'withdrawal-approvals.decide',
+            'rg.view',
+            'rg.manage',
+            'accounts.status',
         ];
 
         foreach ($permissions as $permission) {
@@ -139,6 +146,8 @@ class RoleSeeder extends Seeder
             'sportsbook.view',
             'predict.view',
             'games.view',
+            'withdrawal-approvals.view',
+            'rg.view',
         ];
 
         $agentPermissions = [
@@ -146,6 +155,8 @@ class RoleSeeder extends Seeder
             'expenses.view', 'expenses.create',
             'game-results.view',
             'reports.view',
+            // Support needs to see whether a player is excluded or limited.
+            'rg.view',
         ];
 
         // Moves money and settles bets through KadiApi and the Kadi site, but does not manage users or roles.
@@ -168,6 +179,7 @@ class RoleSeeder extends Seeder
             'sportsbook.view', 'sportsbook.settle', 'sportsbook.jackpots',
             'predict.view', 'predict.settle',
             'games.view', 'wagers.void',
+            'withdrawal-approvals.view', 'withdrawal-approvals.decide', 'rg.view', 'rg.manage', 'accounts.status',
         ];
 
         // Runs sportsbook trading on the Kadi site: suspensions, prices, competitions and jackpot drafts.
