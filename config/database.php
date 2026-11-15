@@ -64,6 +64,36 @@ return [
             ]) : [],
         ],
 
+        /*
+         * The Kadi player site's database, read through a SELECT-only MySQL user
+         * (kadi docs/backoffice-api.md). Every change goes through the signed
+         * back-office API instead: App\Services\SiteBackofficeClient.
+         */
+        'kadi_site' => [
+            'driver' => 'mysql',
+            'host' => env('KADI_SITE_DB_HOST', '127.0.0.1'),
+            'port' => env('KADI_SITE_DB_PORT', '3306'),
+            'database' => env('KADI_SITE_DB_DATABASE', 'kadi'),
+            'username' => env('KADI_SITE_DB_USERNAME', 'gms_readonly'),
+            'password' => env('KADI_SITE_DB_PASSWORD', ''),
+            'unix_socket' => env('KADI_SITE_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            // Every sb_* datetime is UTC.
+            'timezone' => '+00:00',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('KADI_SITE_DB_SSL_CA'),
+            ]) : [],
+        ],
+
+        /*
+         * Legacy database with the old `accounts` table (profile pictures). Not the
+         * Kadi site's schema: the site is the `kadi_site` connection above.
+         */
         'kadi' => [
             'driver' => 'mysql',
             'host' => env('DB_HOST', '127.0.0.1'),

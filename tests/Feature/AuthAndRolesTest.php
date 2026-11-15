@@ -110,3 +110,25 @@ it('updates password via the profile page', function (): void {
 
     expect(Hash::check('NewPass@123', $user->fresh()->password))->toBeTrue();
 });
+
+it('gives the finance role money and settlement actions but no access management', function (): void {
+    $finance = User::factory()->create();
+    $finance->assignRole('finance');
+
+    expect($finance->hasAllPermissions(['deposits.refund', 'bet-shops.float', 'referral-withdrawals.settle', 'sportsbook.settle', 'sportsbook.jackpots']))->toBeTrue()
+        ->and($finance->hasAnyPermission(['users.create', 'roles.edit', 'permissions.edit', 'payouts.approve', 'sportsbook.trade']))->toBeFalse();
+});
+
+it('limits the trader role to sportsbook trading', function (): void {
+    $trader = User::factory()->create();
+    $trader->assignRole('trader');
+
+    expect($trader->getAllPermissions()->pluck('name')->sort()->values()->all())->toBe(['sportsbook.trade', 'sportsbook.view']);
+});
+
+it('keeps agents out of the sportsbook pages', function (): void {
+    $agent = User::factory()->create();
+    $agent->assignRole('agent');
+
+    expect($agent->hasPermissionTo('sportsbook.view'))->toBeFalse();
+});

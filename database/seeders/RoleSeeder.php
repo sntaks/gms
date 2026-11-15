@@ -95,6 +95,12 @@ class RoleSeeder extends Seeder
 
             // Administration
             'audit-logs.view',
+
+            // Sportsbook (Kadi site back office)
+            'sportsbook.view',
+            'sportsbook.trade',
+            'sportsbook.settle',
+            'sportsbook.jackpots',
         ];
 
         foreach ($permissions as $permission) {
@@ -119,6 +125,7 @@ class RoleSeeder extends Seeder
             'bet-shops.view',
             'game-results.view', 'jackpot-results.view', 'tournament-results.view',
             'reports.view',
+            'sportsbook.view',
         ];
 
         $agentPermissions = [
@@ -128,10 +135,38 @@ class RoleSeeder extends Seeder
             'reports.view',
         ];
 
+        // Moves money and settles bets through KadiApi and the Kadi site, but does not manage users or roles.
+        $financePermissions = [
+            'accounts.view', 'account.view',
+            'complaints.view',
+            'withdrawals.view',
+            'expenses.view', 'expenses.create',
+            'payouts.view',
+            'company-withdrawals.view',
+            'wallet-transactions.view',
+            'income-distributions.view',
+            'api-income-logs.view',
+            'deposits.view', 'deposits.assign', 'deposits.refund', 'deposits.match',
+            'bet-shops.view', 'bet-shops.float', 'bet-shops.reverse-loads',
+            'referral-withdrawals.settle', 'referral-codes.edit',
+            'promo-codes.manage',
+            'game-results.view', 'jackpot-results.view', 'tournament-results.view',
+            'reports.view', 'excise-duty.remit',
+            'sportsbook.view', 'sportsbook.settle', 'sportsbook.jackpots',
+        ];
+
+        // Runs sportsbook trading on the Kadi site: suspensions, prices, competitions and jackpot drafts.
+        $traderPermissions = [
+            'sportsbook.view',
+            'sportsbook.trade',
+        ];
+
         $roles = [
             'super-admin' => $allPermissions,
             'admin' => $allPermissions,
             'manager' => Permission::whereIn('name', $managerPermissions)->get(),
+            'finance' => Permission::whereIn('name', $financePermissions)->get(),
+            'trader' => Permission::whereIn('name', $traderPermissions)->get(),
             'agent' => Permission::whereIn('name', $agentPermissions)->get(),
         ];
 
