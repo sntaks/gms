@@ -101,6 +101,11 @@ class RoleSeeder extends Seeder
             'sportsbook.trade',
             'sportsbook.settle',
             'sportsbook.jackpots',
+
+            // Prediction markets (Kadi API)
+            'predict.view',
+            'predict.manage',
+            'predict.settle',
         ];
 
         foreach ($permissions as $permission) {
@@ -126,6 +131,7 @@ class RoleSeeder extends Seeder
             'game-results.view', 'jackpot-results.view', 'tournament-results.view',
             'reports.view',
             'sportsbook.view',
+            'predict.view',
         ];
 
         $agentPermissions = [
@@ -153,6 +159,7 @@ class RoleSeeder extends Seeder
             'game-results.view', 'jackpot-results.view', 'tournament-results.view',
             'reports.view', 'excise-duty.remit',
             'sportsbook.view', 'sportsbook.settle', 'sportsbook.jackpots',
+            'predict.view', 'predict.settle',
         ];
 
         // Runs sportsbook trading on the Kadi site: suspensions, prices, competitions and jackpot drafts.

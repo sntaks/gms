@@ -1576,6 +1576,91 @@ class GameApiService
      *
      * @var list<string>
      */
+    // ── Prediction markets (admin) ───────────────────────────
+    // Every write needs `admin_user` (StaffIdentity::adminUser()). The predict admin routes keep no
+    // idempotency record, so a write that timed out must never be sent again blindly: reload the
+    // market and check its status first.
+
+    /**
+     * One page of markets, drafts and rejected ones included.
+     * Endpoint: GET /api/v1/predict/admin/markets
+     *
+     * @param  array<string, mixed>  $filters  status, source, category, country, sort, page, per_page (max 100)
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listPredictMarkets(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/predict/admin/markets', query: $this->withoutBlankFilters($filters), timeout: 20)['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: GET /api/v1/predict/admin/markets/{id}
+     *
+     * @return array<string, mixed>
+     */
+    public function getPredictMarket(int $id): array
+    {
+        return $this->makeRequest('GET', "/predict/admin/markets/{$id}")['data'] ?? [];
+    }
+
+    /**
+     * Create a draft. Terms left out take the API's defaults.
+     * Endpoint: POST /api/v1/predict/admin/markets
+     *
+     * @param  array<string, mixed>  $payload  Including admin_user.
+     * @return array<string, mixed>
+     */
+    public function createPredictMarket(array $payload): array
+    {
+        return $this->makeRequest('POST', '/predict/admin/markets', $payload)['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: PUT /api/v1/predict/admin/markets/{id} (409 market_terms_frozen / market_not_editable)
+     *
+     * @param  array<string, mixed>  $payload  Including admin_user.
+     * @return array<string, mixed>
+     */
+    public function updatePredictMarket(int $id, array $payload): array
+    {
+        return $this->makeRequest('PUT', "/predict/admin/markets/{$id}", $payload)['data'] ?? [];
+    }
+
+    /**
+     * publish, reject, suspend, resume, close, resolve (`result`) or void (`reason`).
+     * Endpoint: POST /api/v1/predict/admin/markets/{id}/{action} (409 invalid_transition, close_time_passed, price_unavailable…)
+     *
+     * @param  array<string, mixed>  $payload  Including admin_user.
+     * @return array<string, mixed>
+     */
+    public function predictMarketAction(int $id, string $action, array $payload): array
+    {
+        if (! in_array($action, self::PREDICT_MARKET_ACTIONS, true)) {
+            throw new \InvalidArgumentException("[{$action}] is not a prediction market action.");
+        }
+
+        return $this->makeRequest('POST', "/predict/admin/markets/{$id}/{$action}", $payload)['data'] ?? [];
+    }
+
+    public const PREDICT_MARKET_ACTIONS = ['publish', 'reject', 'suspend', 'resume', 'close', 'resolve', 'void'];
+
+    /**
+     * Publish or reject drafts by `ids`, or by `filter` with the `after_id` cursor: repeat with
+     * `after_id` = the answer's `next_after_id` until it is null, so refused drafts are passed over.
+     * Endpoint: POST /api/v1/predict/admin/markets/bulk/{publish|reject}
+     *
+     * @param  array<string, mixed>  $payload  admin_user, ids | filter (+ after_id, limit), reason (reject)
+     * @return array{done?: list<int>, refused?: list<array{id: int, code: string}>, remaining?: int, next_after_id?: int|null}
+     */
+    public function bulkPredictMarkets(string $action, array $payload): array
+    {
+        if (! in_array($action, ['publish', 'reject'], true)) {
+            throw new \InvalidArgumentException("[{$action}] is not a bulk prediction market action.");
+        }
+
+        return $this->makeRequest('POST', "/predict/admin/markets/bulk/{$action}", $payload, timeout: 45)['data'] ?? [];
+    }
+
     /**
      * The Kadi API's own record of a wager, found by the reference its game sent
      * (for a Kadi site sports bet, `sb_bets.wager_reference`). Null when the API

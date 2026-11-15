@@ -92,6 +92,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('🎮 Players'),
                 NavigationGroup::make('🏪 Bet Shops'),
                 NavigationGroup::make('⚽ Sportsbook'),
+                NavigationGroup::make('🔮 Predictions'),
                 NavigationGroup::make('🎁 Referrals'),
                 NavigationGroup::make('🎯 Game Results'),
                 NavigationGroup::make('🤝 Shareholders'),
