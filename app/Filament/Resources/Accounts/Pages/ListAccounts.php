@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Accounts\Pages;
 
 use App\Filament\Resources\Accounts\AccountResource;
+use App\Livewire\CustomerCompliancePanel;
 use App\Models\Account;
 use App\Services\GameApiService;
 use App\Support\ApiTablePaginator;
@@ -80,8 +81,15 @@ class ListAccounts extends Page implements HasTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => (int) $state === Account::STATUS_ACTIVE ? 'Active' : 'Hidden')
-                    ->color(fn ($state): string => (int) $state === Account::STATUS_ACTIVE ? 'success' : 'gray'),
+                    // The Kadi API's statuses (1–6). Status 0 was set by the old Hide action; change it from the
+                    // customer page's Compliance tab, which keeps a reason in the API's status history.
+                    ->formatStateUsing(fn ($state): string => (int) $state === Account::STATUS_HIDDEN ? 'Hidden (old)' : CustomerCompliancePanel::statusLabel($state))
+                    ->color(fn ($state): string => match ((int) $state) {
+                        1, 3 => 'success',
+                        2, 5 => 'danger',
+                        6 => 'info',
+                        default => 'gray',
+                    }),
             ])
             ->recordActions([
                 Action::make('view')
@@ -120,40 +128,6 @@ class ListAccounts extends Page implements HasTable
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
-                        }
-                    }),
-
-                Action::make('hide')
-                    ->iconButton()
-                    ->icon(Heroicon::OutlinedEyeSlash)
-                    ->color('danger')
-                    ->tooltip('Hide Profile')
-                    ->requiresConfirmation()
-                    ->visible(fn (array $record): bool => ((int) ($record['status'] ?? Account::STATUS_ACTIVE)) === Account::STATUS_ACTIVE && auth()->user()->hasPermissionTo('account.edit'))
-                    ->action(function (array $record): void {
-                        try {
-                            app(GameApiService::class)->updateCustomer($record['id'], ['status' => Account::STATUS_HIDDEN]);
-                            Cache::forget('customers_list');
-                            Notification::make()->title('Profile hidden')->success()->send();
-                        } catch (\Throwable $e) {
-                            Notification::make()->title('Failed to hide profile')->body($e->getMessage())->danger()->send();
-                        }
-                    }),
-
-                Action::make('unhide')
-                    ->iconButton()
-                    ->icon(Heroicon::OutlinedEye)
-                    ->color('success')
-                    ->tooltip('Unhide Profile')
-                    ->requiresConfirmation()
-                    ->visible(fn (array $record): bool => ((int) ($record['status'] ?? Account::STATUS_ACTIVE)) === Account::STATUS_HIDDEN && auth()->user()->hasPermissionTo('account.edit'))
-                    ->action(function (array $record): void {
-                        try {
-                            app(GameApiService::class)->updateCustomer($record['id'], ['status' => Account::STATUS_ACTIVE]);
-                            Cache::forget('customers_list');
-                            Notification::make()->title('Profile unhidden')->success()->send();
-                        } catch (\Throwable $e) {
-                            Notification::make()->title('Failed to unhide profile')->body($e->getMessage())->danger()->send();
                         }
                     }),
             ])
