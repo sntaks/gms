@@ -59,7 +59,7 @@ class SportsbookBetsPage extends Page implements HasTable
 
     protected static string|UnitEnum|null $navigationGroup = '⚽ Sportsbook';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     protected static ?string $slug = 'sportsbook/bets';
 
@@ -151,7 +151,7 @@ class SportsbookBetsPage extends Page implements HasTable
                     ->badge()
                     ->color(fn (?string $state): string => static::statusColor($state))
                     ->formatStateUsing(fn (?string $state): string => self::STATUSES[$state] ?? ucfirst((string) $state))
-                    ->description(fn (SbBet $record): ?string => $record->reject_reason),
+                    ->description(fn (SbBet $record): ?string => SportsbookFormat::rejectReason($record->reject_reason)),
             ])
             ->filters([
                 SelectFilter::make('product')

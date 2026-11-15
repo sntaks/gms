@@ -29,6 +29,33 @@ final class SportsbookFormat
     ];
 
     /**
+     * `sb_bets.reject_reason` values from the site's in-play re-check (AcceptInPlayBet).
+     * Anything else is the Kadi API's refusal code (e.g. `insufficient_funds`), shown humanised.
+     *
+     * @var array<string, string>
+     */
+    public const REJECT_REASONS = [
+        'live_market_closed' => 'Live market closed during the delay',
+        'selection_closed' => 'Selection closed during the delay',
+        'live_price_stale' => 'Live price went stale during the delay',
+        'live_score_changed' => 'Score changed during the delay',
+        'live_price_changed' => 'Live price moved against the player',
+        'player_token_invalid' => 'Player signed out before it was sent',
+    ];
+
+    /**
+     * Live feed health of a match from the age of its newest live price.
+     *
+     * @var array<string, string>
+     */
+    public const FEED_HEALTH = [
+        'fresh' => 'Fresh',
+        'ageing' => 'Ageing',
+        'stale' => 'Stale',
+        'none' => 'No live price',
+    ];
+
+    /**
      * Fixture states shown to staff, derived from the site's columns.
      *
      * @var array<string, string>
@@ -89,6 +116,37 @@ final class SportsbookFormat
             'correct_score' => 'Correct score',
             'ht_ft' => 'Half time / full time',
             default => ucfirst(str_replace('_', ' ', (string) $market->type)).$line,
+        };
+    }
+
+    public static function rejectReason(?string $reason): ?string
+    {
+        if ($reason === null || $reason === '') {
+            return null;
+        }
+
+        return self::REJECT_REASONS[$reason] ?? ucfirst(str_replace(['_', '-'], ' ', $reason));
+    }
+
+    /**
+     * `fresh` under the site's suspension age, `ageing` until its health alert, then `stale`.
+     */
+    public static function feedHealth(?int $priceAgeSeconds): string
+    {
+        return match (true) {
+            $priceAgeSeconds === null => 'none',
+            $priceAgeSeconds < (int) config('sportsbook.in_play.live_stale_seconds') => 'fresh',
+            $priceAgeSeconds < (int) config('sportsbook.in_play.feed_alert_seconds') => 'ageing',
+            default => 'stale',
+        };
+    }
+
+    public static function feedHealthColor(string $health): string
+    {
+        return match ($health) {
+            'fresh' => 'success',
+            'ageing' => 'warning',
+            default => 'danger',
         };
     }
 

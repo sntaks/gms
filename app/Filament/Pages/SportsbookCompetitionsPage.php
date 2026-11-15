@@ -36,7 +36,7 @@ class SportsbookCompetitionsPage extends Page implements HasTable
 
     protected static string|UnitEnum|null $navigationGroup = '⚽ Sportsbook';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $slug = 'sportsbook/competitions';
 

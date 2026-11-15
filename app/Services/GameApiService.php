@@ -1576,6 +1576,21 @@ class GameApiService
      *
      * @var list<string>
      */
+    /**
+     * The Kadi API's own record of a wager, found by the reference its game sent
+     * (for a Kadi site sports bet, `sb_bets.wager_reference`). Null when the API
+     * has no wager with that reference.
+     * Endpoint: GET /api/v1/wagers?reference=
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findWagerByReference(string $reference): ?array
+    {
+        $items = $this->makeRequest('GET', '/wagers', query: ['reference' => $reference, 'per_page' => 1])['data']['items'] ?? [];
+
+        return is_array($items[0] ?? null) ? $items[0] : null;
+    }
+
     public const BET_SHOP_FIELDS = ['shop_no', 'name', 'owner_name', 'owner_phone', 'location', 'notes'];
 
     public const BET_SHOP_OPTIONS_CACHE_KEY = 'game_api:bet-shops:options';
