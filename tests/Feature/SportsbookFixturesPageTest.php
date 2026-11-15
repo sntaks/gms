@@ -1,11 +1,9 @@
 <?php
 
-use App\Enums\UserStatus;
 use App\Filament\Pages\SportsbookFixturesPage;
 use App\Models\Site\SbFixture;
 use App\Models\Site\SbFixtureResult;
 use App\Models\Site\SbMarket;
-use App\Models\User;
 use Livewire\Livewire;
 use Tests\Support\SiteSchema;
 
@@ -17,17 +15,8 @@ beforeEach(function (): void {
     SiteSchema::create();
 });
 
-function actingAsStaff(string $role): User
-{
-    $user = User::factory()->create(['status' => UserStatus::Active->value]);
-    $user->assignRole($role);
-    test()->actingAs($user);
-
-    return $user;
-}
-
 it('opens the fixtures to sportsbook viewers and keeps other staff out', function (string $role, bool $allowed): void {
-    actingAsStaff($role);
+    signInWithRole($role);
 
     $response = get(SportsbookFixturesPage::getUrl());
 
@@ -41,7 +30,7 @@ it('opens the fixtures to sportsbook viewers and keeps other staff out', functio
 
 it('sorts fixtures into upcoming, live, awaiting result, resulted and cancelled', function (): void {
     freezeTime();
-    actingAsStaff('trader');
+    signInWithRole('trader');
     $upcoming = SbFixture::factory()->create(['kicks_off_at' => now()->addHours(2)]);
     $live = SbFixture::factory()->create(['kicks_off_at' => now()->subMinutes(30)]);
     $feedDone = SbFixture::factory()->create(['kicks_off_at' => now()->subHours(2), 'feed_completed_at' => now()->subMinutes(5)]);
@@ -67,7 +56,7 @@ it('sorts fixtures into upcoming, live, awaiting result, resulted and cancelled'
 });
 
 it('shows the score and how many markets are open and suspended', function (): void {
-    actingAsStaff('trader');
+    signInWithRole('trader');
     $fixture = SbFixture::factory()->create([
         'home_team' => 'Arsenal', 'away_team' => 'Chelsea',
         'kicks_off_at' => now()->subMinutes(20), 'home_score' => 1, 'away_score' => 0,

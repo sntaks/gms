@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\UserStatus;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Tests\TestCase;
@@ -78,4 +80,18 @@ function useFakeSiteBackoffice(): void
         'services.kadi_site.url' => 'https://kadi.test',
         'services.kadi_site.secret' => 'test-secret',
     ]);
+}
+
+/**
+ * Sign in an active GMS user with one role (run RoleSeeder first).
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function signInWithRole(string $role, array $attributes = []): User
+{
+    $user = User::factory()->create(['status' => UserStatus::Active->value, ...$attributes]);
+    $user->assignRole($role);
+    test()->actingAs($user);
+
+    return $user;
 }
