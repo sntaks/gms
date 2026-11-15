@@ -41,6 +41,16 @@ class User extends Authenticatable implements FilamentUser, HasMedia
     }
 
     /**
+     * Company-level finance reports (the Finance Reports cluster and their CSV exports):
+     * admins and the finance role, with `reports.view`. Managers and agents also hold
+     * `reports.view` for game reports, so the role check keeps them out.
+     */
+    public function canViewFinanceReports(): bool
+    {
+        return $this->hasAnyRole(['super-admin', 'admin', 'finance']) && $this->hasPermissionTo('reports.view');
+    }
+
+    /**
      * Set the phone attribute - convert 0|+254 prefix to 254 for storage
      */
     public function setPhoneAttribute($value): void

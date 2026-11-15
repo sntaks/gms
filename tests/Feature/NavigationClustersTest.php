@@ -4,8 +4,11 @@ use App\Enums\UserStatus;
 use App\Filament\Clusters\FinanceReports\FinanceReportsCluster;
 use App\Filament\Clusters\GameReports\GameReportsCluster;
 use App\Filament\Pages\CashFlowReport;
+use App\Filament\Pages\ExciseRemittancesReport;
 use App\Filament\Pages\GameIncomeReport;
 use App\Filament\Pages\IncomeStatementReport;
+use App\Filament\Pages\ReconciliationReport;
+use App\Filament\Pages\SportsbookReconciliationReport;
 use App\Models\User;
 use Filament\Pages\Dashboard;
 use Illuminate\Support\Facades\Cache;
@@ -110,3 +113,24 @@ it('shows managers and agents the game reports but not the finance reports', fun
 
     get(FinanceReportsCluster::getUrl())->assertForbidden();
 })->with(['manager', 'agent']);
+
+it('opens the finance reports, their exports and excise remittances to the finance role', function (): void {
+    $finance = User::factory()->create(['status' => UserStatus::Active->value]);
+    $finance->assignRole('finance');
+    $this->actingAs($finance);
+
+    expect(sidebarHtml())->toContain('Finance Reports')
+        ->and(ExciseRemittancesReport::canRemit())->toBeTrue();
+
+    get(IncomeStatementReport::getUrl())->assertOk();
+    Http::fake(['game-api.test/*' => Http::response('date,amount', 200, ['Content-Type' => 'text/csv'])]);
+    get(route('finance.export', ['report' => 'income-statement']))->assertOk();
+});
+
+it('keeps the sportsbook reconciliation after the other overview reports', function (): void {
+    $this->actingAs($this->admin);
+
+    get(FinanceReportsCluster::getUrl())->assertRedirect(IncomeStatementReport::getUrl());
+    expect(SportsbookReconciliationReport::getNavigationSort())
+        ->toBe(ReconciliationReport::getNavigationSort());
+});
