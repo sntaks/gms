@@ -2,6 +2,8 @@
 
 namespace App\Models\Site;
 
+use Database\Factories\Site\SbJackpotFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -9,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class SbJackpot extends SiteModel
 {
+    /** @use HasFactory<SbJackpotFactory> */
+    use HasFactory;
+
     protected $table = 'sb_jackpots';
 
     /**

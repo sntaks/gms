@@ -2,6 +2,8 @@
 
 namespace App\Models\Site;
 
+use Database\Factories\Site\SbJackpotFixtureFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -9,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SbJackpotFixture extends SiteModel
 {
+    /** @use HasFactory<SbJackpotFixtureFactory> */
+    use HasFactory;
+
     protected $table = 'sb_jackpot_fixtures';
 
     /**
