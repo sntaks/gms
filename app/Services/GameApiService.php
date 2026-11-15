@@ -1577,6 +1577,142 @@ class GameApiService
      *
      * @var list<string>
      */
+    // ── Compliance: held withdrawals, responsible gambling, customer status ──
+
+    /**
+     * Withdrawals of KES 20,000 or more held for an admin, oldest first.
+     * Endpoint: GET /api/v1/withdrawals/pending
+     *
+     * @param  array<string, mixed>  $filters  customer, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listPendingWithdrawalApprovals(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/withdrawals/pending', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Every held withdrawal and its decision, newest first.
+     * Endpoint: GET /api/v1/withdrawals/approvals
+     *
+     * @param  array<string, mixed>  $filters  status (awaiting, approved, rejected, cancelled), customer, from, to, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listWithdrawalApprovals(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/withdrawals/approvals', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Approve a held withdrawal and send it to M-Pesa. 200: sent. 502: approved but M-Pesa refused, the
+     * player is refunded. 504 `payout_unknown`: approved but M-Pesa never answered; never retry, check the
+     * statement. 409 `not_awaiting`: already decided.
+     * Endpoint: POST /api/v1/withdrawals/{id}/approve
+     *
+     * @return array<string, mixed> The approval.
+     */
+    public function approveWithdrawal(int $withdrawalId, string $adminUser): array
+    {
+        return $this->makeRequest('POST', "/withdrawals/{$withdrawalId}/approve", ['admin_user' => $adminUser], timeout: 45)['data'] ?? [];
+    }
+
+    /**
+     * Reject a held withdrawal; the player is refunded at once.
+     * Endpoint: POST /api/v1/withdrawals/{id}/reject (reason 3–500)
+     *
+     * @return array<string, mixed> The approval.
+     */
+    public function rejectWithdrawal(int $withdrawalId, string $adminUser, string $reason): array
+    {
+        return $this->makeRequest('POST', "/withdrawals/{$withdrawalId}/reject", ['admin_user' => $adminUser, 'reason' => $reason])['data'] ?? [];
+    }
+
+    /**
+     * Deposits credited although the player's own rules would have refused them.
+     * Endpoint: GET /api/v1/responsible-gambling/flags
+     *
+     * @param  array<string, mixed>  $filters  customer, type, resolved, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listRgFlags(array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/responsible-gambling/flags', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: POST /api/v1/responsible-gambling/flags/{id}/resolve (note 3–500)
+     *
+     * @return array<string, mixed>
+     */
+    public function resolveRgFlag(int $flagId, string $adminUser, string $note): array
+    {
+        return $this->makeRequest('POST', "/responsible-gambling/flags/{$flagId}/resolve", ['admin_user' => $adminUser, 'note' => $note])['data'] ?? [];
+    }
+
+    /**
+     * A player's status, whether they can play, any active exclusion and their deposit limits.
+     * Endpoint: GET /api/v1/customers/{enc}/responsible-gambling
+     *
+     * @return array<string, mixed>
+     */
+    public function getCustomerResponsibleGambling(int $customerId): array
+    {
+        return $this->makeRequest('GET', '/customers/'.$this->encryptId($customerId).'/responsible-gambling')['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: GET /api/v1/customers/{enc}/exclusions
+     *
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listCustomerExclusions(int $customerId): array
+    {
+        return $this->makeRequest('GET', '/customers/'.$this->encryptId($customerId).'/exclusions')['data'] ?? [];
+    }
+
+    /**
+     * Start a cool-off (24h, 7d, 30d) or self-exclusion (6m, 1y, 5y) on the player's request.
+     * Endpoint: POST /api/v1/customers/{enc}/exclusion
+     *
+     * @return array<string, mixed>
+     */
+    public function startCustomerExclusion(int $customerId, string $type, string $duration): array
+    {
+        return $this->makeRequest('POST', '/customers/'.$this->encryptId($customerId).'/exclusion', ['type' => $type, 'duration' => $duration])['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: PUT /api/v1/customers/{enc}/status (status 1–6, reason 3–500, admin_user)
+     *
+     * @return array{status?: int, previous_status?: int}
+     */
+    public function updateCustomerStatus(int $customerId, int $status, string $reason, string $adminUser): array
+    {
+        return $this->makeRequest('PUT', '/customers/'.$this->encryptId($customerId).'/status', ['status' => $status, 'reason' => $reason, 'admin_user' => $adminUser])['data'] ?? [];
+    }
+
+    /**
+     * Endpoint: GET /api/v1/customers/{enc}/status-changes
+     *
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listCustomerStatusChanges(int $customerId): array
+    {
+        return $this->makeRequest('GET', '/customers/'.$this->encryptId($customerId).'/status-changes')['data'] ?? [];
+    }
+
+    /**
+     * A player's prediction market bets.
+     * Endpoint: GET /api/v1/customers/{enc}/predict/bets
+     *
+     * @param  array<string, mixed>  $filters  status, page, per_page
+     * @return array{items?: list<array<string, mixed>>, pagination?: array<string, int>}
+     */
+    public function listCustomerPredictBets(int $customerId, array $filters = []): array
+    {
+        return $this->makeRequest('GET', '/customers/'.$this->encryptId($customerId).'/predict/bets', query: $this->withoutBlankFilters($filters))['data'] ?? [];
+    }
+
     // ── Games catalogue, products, game keys and wagers ──────
     // The games, products and wager-void routes keep no idempotency record: never resend a write.
 

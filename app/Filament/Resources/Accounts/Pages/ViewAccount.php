@@ -291,6 +291,31 @@ class ViewAccount extends Page
                                     ->viewData(['customerId' => $this->customerId]),
                             ]),
 
+                        Tab::make('Compliance')
+                            ->visible(fn (): bool => auth()->user()?->hasPermissionTo('rg.view') ?? false)
+                            ->schema([
+                                ViewEntry::make('compliance')
+                                    ->hiddenLabel()
+                                    ->view('infolists.compliance-tab')
+                                    ->viewData(['customerId' => $this->customerId]),
+                            ]),
+
+                        Tab::make('Sports bets')
+                            ->schema([
+                                ViewEntry::make('sports_bets')
+                                    ->hiddenLabel()
+                                    ->view('infolists.sports-bets-tab')
+                                    ->viewData(['customerId' => $this->customerId]),
+                            ]),
+
+                        Tab::make('Prediction bets')
+                            ->schema([
+                                ViewEntry::make('predict_bets')
+                                    ->hiddenLabel()
+                                    ->view('infolists.predict-bets-tab')
+                                    ->viewData(['customerId' => $this->customerId]),
+                            ]),
+
                         Tab::make('Purchases')
                             ->badge(count($this->purchases))
                             ->schema([
