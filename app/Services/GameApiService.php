@@ -989,7 +989,7 @@ class GameApiService
         'customers-top', 'cash-flow', 'income-statement', 'trial-balance', 'expenses', 'taxes',
         'excise-duty', 'excise-duty-charges', 'excise-duty-returns', 'excise-duty-remittances', 'disputes',
         'referral-bonuses', 'referral-withdrawals', 'promotions', 'bet-shops', 'bet-shop-loads', 'bet-shop-withdrawals',
-        'house-banked',
+        'house-banked', 'open-wallets', 'house-funding',
     ];
 
     /**
@@ -1075,6 +1075,62 @@ class GameApiService
         $this->forgetFinanceReports();
 
         return $remittance;
+    }
+
+    /**
+     * Record a payment of winnings tax to KRA. The API attaches every unremitted charge and credit
+     * in the period (422 when nothing is owed in it or the KRA reference is taken).
+     * Endpoint: POST /api/v1/finance/winnings-tax/remittances
+     *
+     * @param  array{period_start: string, period_end: string, amount_paid: float|int|string, kra_reference: string, paid_at?: ?string}  $data
+     * @return array<string, mixed> The new remittance.
+     */
+    public function recordWinningsTaxRemittance(array $data, string $idempotencyKey): array
+    {
+        $body = collect($data)
+            ->only(['period_start', 'period_end', 'amount_paid', 'kra_reference', 'paid_at'])
+            ->reject(fn ($value): bool => $value === null || $value === '')
+            ->all();
+
+        $remittance = $this->makeRequest('POST', '/finance/winnings-tax/remittances', $body, timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $remittance;
+    }
+
+    /**
+     * Void a winnings tax remittance; its charges are detached and owed again (404, 409 already voided).
+     * Endpoint: POST /api/v1/finance/winnings-tax/remittances/{enc}/void
+     *
+     * @return array<string, mixed> The voided remittance.
+     */
+    public function voidWinningsTaxRemittance(int $remittanceId, string $reason, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($remittanceId);
+
+        $remittance = $this->makeRequest('POST', "/finance/winnings-tax/remittances/{$enc}/void", ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $remittance;
+    }
+
+    /**
+     * Void a house funding entered in error (409 insufficient_house_balance, already_resolved).
+     * Endpoint: POST /api/v1/finance/house-funding/{enc}/void
+     *
+     * @return array<string, mixed>
+     */
+    public function voidHouseFunding(int $houseFundingId, string $reason, string $idempotencyKey): array
+    {
+        $enc = $this->encryptId($houseFundingId);
+
+        $result = $this->makeRequest('POST', "/finance/house-funding/{$enc}/void", ['reason' => $reason], timeout: 30, idempotencyKey: $idempotencyKey)['data'] ?? [];
+
+        $this->forgetFinanceReports();
+
+        return $result;
     }
 
     /**
