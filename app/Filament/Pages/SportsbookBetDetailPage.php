@@ -3,8 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Concerns\HandlesSiteWrites;
+use App\Exceptions\GameApiException;
 use App\Models\Site\SbBet;
 use App\Models\Site\SbBetLeg;
+use App\Services\GameApiService;
+use App\Support\Format;
 use App\Support\SportsbookFormat;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -19,6 +22,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Url;
 
 /**
@@ -58,6 +62,11 @@ class SportsbookBetDetailPage extends Page implements HasTable
 
     protected ?SbBet $betRecord = null;
 
+    /**
+     * @var array{wager: array<string, mixed>|null, error: string|null}|null
+     */
+    protected ?array $apiWager = null;
+
     public static function canAccess(): bool
     {
         return SportsbookBetsPage::canAccess();
@@ -73,6 +82,73 @@ class SportsbookBetDetailPage extends Page implements HasTable
     public function record(): SbBet
     {
         return $this->betRecord ??= SbBet::query()->with(['user', 'freeBet'])->findOrFail($this->bet);
+    }
+
+    /**
+     * The Kadi API's record of this bet's wager, or why it could not be read.
+     *
+     * @return array{wager: array<string, mixed>|null, error: string|null}
+     */
+    public function apiWager(): array
+    {
+        if ($this->apiWager !== null) {
+            return $this->apiWager;
+        }
+
+        $reference = $this->record()->wager_reference;
+
+        if ($reference === null) {
+            return $this->apiWager = ['wager' => null, 'error' => 'This bet has no Kadi API wager reference.'];
+        }
+
+        try {
+            return $this->apiWager = ['wager' => app(GameApiService::class)->findWagerByReference($reference), 'error' => null];
+        } catch (GameApiException $e) {
+            return $this->apiWager = ['wager' => null, 'error' => 'KadiApi could not be read: '.($e->apiMessage !== '' ? $e->apiMessage : $e->getMessage())];
+        } catch (\Throwable $e) {
+            Log::warning('Kadi API wager lookup failed', ['bet' => $this->bet, 'error' => $e->getMessage()]);
+
+            return $this->apiWager = ['wager' => null, 'error' => 'KadiApi could not be reached.'];
+        }
+    }
+
+    /**
+     * Where the site and the Kadi API disagree on this bet: status, payout (site cents vs
+     * API KES) or settlement version. Empty when they agree, or when there is nothing to
+     * compare yet (a bet still being checked, or one the site rejected).
+     *
+     * @param  array<string, mixed>  $wager
+     * @return list<string>
+     */
+    public static function differences(SbBet $bet, array $wager): array
+    {
+        $expectedStatus = match ($bet->status) {
+            'open', 'won', 'lost' => $bet->status,
+            'void', 'cancelled' => 'void',
+            default => null,
+        };
+
+        if ($expectedStatus === null) {
+            return [];
+        }
+
+        $differences = [];
+
+        if (($wager['status'] ?? null) !== $expectedStatus) {
+            $differences[] = 'status: site '.$bet->status.', Kadi API '.($wager['status'] ?? '—');
+        }
+
+        $apiPayoutCents = (int) round(((float) ($wager['payout'] ?? 0)) * 100);
+
+        if ($expectedStatus !== 'open' && $apiPayoutCents !== (int) ($bet->payout ?? 0)) {
+            $differences[] = 'payout: site '.SportsbookFormat::cents($bet->payout).', Kadi API '.SportsbookFormat::cents($apiPayoutCents);
+        }
+
+        if ((int) ($wager['settlement_version'] ?? -1) !== (int) $bet->settlement_version) {
+            $differences[] = 'settlement version: site '.$bet->settlement_version.', Kadi API '.($wager['settlement_version'] ?? '—');
+        }
+
+        return $differences;
     }
 
     public function getTitle(): string|Htmlable
@@ -117,7 +193,7 @@ class SportsbookBetDetailPage extends Page implements HasTable
                             ->badge()
                             ->color(fn (?string $state): string => SportsbookBetsPage::statusColor($state))
                             ->formatStateUsing(fn (?string $state): string => SportsbookBetsPage::STATUSES[$state] ?? ucfirst((string) $state))
-                            ->helperText($bet->reject_reason === null ? null : 'Reason: '.$bet->reject_reason),
+                            ->helperText($bet->reject_reason === null ? null : 'Reason: '.SportsbookFormat::rejectReason($bet->reject_reason)),
                         TextEntry::make('player'),
                         TextEntry::make('product'),
                         TextEntry::make('stake')->weight('bold'),
@@ -146,6 +222,35 @@ class SportsbookBetDetailPage extends Page implements HasTable
                             ->columnSpan(['md' => 3]),
                         TextEntry::make('settlement_version')->label('Settlement version'),
                     ]),
+                $this->apiWagerSection(),
+            ]);
+    }
+
+    protected function apiWagerSection(): Section
+    {
+        $bet = $this->record();
+        ['wager' => $wager, 'error' => $error] = $this->apiWager();
+        $differences = $wager === null ? [] : static::differences($bet, $wager);
+
+        $check = match (true) {
+            $error !== null => $error,
+            $wager === null => in_array($bet->status, ['pending', 'rejected'], true)
+                ? 'No Kadi API wager, as expected for a bet that was '.($bet->status === 'pending' ? 'not sent yet.' : 'rejected.')
+                : 'The Kadi API has no wager with this reference. Check the wager ops for this bet.',
+            $differences === [] => 'The site and the Kadi API agree.',
+            default => 'They differ on '.implode('; ', $differences).'. Pending wager ops close the gap once sent; otherwise check the wager ops.',
+        };
+
+        return Section::make('Kadi API wager')
+            ->description($check)
+            ->icon($error === null && ($differences !== [] || ($wager === null && ! in_array($bet->status, ['pending', 'rejected'], true))) ? 'heroicon-o-exclamation-triangle' : null)
+            ->iconColor('warning')
+            ->columns(['default' => 1, 'md' => 4])
+            ->schema($wager === null ? [] : [
+                TextEntry::make('api_status')->label('Status')->state($wager['status'] ?? '—'),
+                TextEntry::make('api_product')->label('Product')->state($wager['product'] ?? '—'),
+                TextEntry::make('api_payout')->label('Payout')->state(Format::money($wager['payout'] ?? 0)),
+                TextEntry::make('api_version')->label('Settlement version')->state((string) ($wager['settlement_version'] ?? '—')),
             ]);
     }
 
@@ -258,6 +363,7 @@ class SportsbookBetDetailPage extends Page implements HasTable
     protected function afterSiteWrite(): void
     {
         $this->betRecord = null;
+        $this->apiWager = null;
         $this->flushCachedTableRecords();
     }
 }
