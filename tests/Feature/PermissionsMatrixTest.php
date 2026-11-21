@@ -2,9 +2,9 @@
 
 use App\Enums\UserStatus;
 use App\Filament\Pages;
+use App\Filament\Pages\Dashboard;
 use App\Models\User;
 use Filament\Facades\Filament;
-use Filament\Pages\Dashboard;
 use Filament\Pages\Page;
 
 beforeEach(function (): void {

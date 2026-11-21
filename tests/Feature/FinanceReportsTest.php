@@ -27,9 +27,7 @@ use App\Filament\Pages\TrialBalanceReport;
 use App\Filament\Widgets\ExciseDutyWidget;
 use App\Filament\Widgets\FinanceOverviewWidget;
 use App\Filament\Widgets\PlatformPositionWidget;
-use App\Filament\Widgets\PlayerEngagementWidget;
 use App\Filament\Widgets\StakesVersusPayoutsChartWidget;
-use App\Filament\Widgets\StatsOverview;
 use App\Filament\Widgets\TopCustomersWidget;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
@@ -156,7 +154,6 @@ beforeEach(function (): void {
         ]], 200),
         '*/finance/export/*' => Http::response("\xEF\xBB\xBFid\n1\n", 200, ['Content-Disposition' => 'attachment; filename="finance-ledger.csv"']),
         '*/finance/*' => financeFixtureStub(),
-        '*/stats/retention' => Http::response(['data' => ['today' => 16, 'week' => 20, 'month' => 147, 'year' => 278, 'total_players' => 278]], 200),
         '*/customers/combined-leaderboard' => Http::response(['leaderboard' => [['id' => 1, 'name' => 'Ada Lovelace', 'single_game_wins' => 10, 'competition_wins' => 5, 'total_wins' => 15]]], 200),
     ]);
 
@@ -342,7 +339,6 @@ it('shows the admin finance widgets to admins and hides them from other roles', 
     FinanceOverviewWidget::class,
     PlatformPositionWidget::class,
     ExciseDutyWidget::class,
-    PlayerEngagementWidget::class,
     StakesVersusPayoutsChartWidget::class,
     TopCustomersWidget::class,
 ]);
@@ -356,7 +352,6 @@ it('renders the finance overview and platform position widgets with API figures'
         ->assertSee('FAIL')
         ->assertSee('B2C KES 28.77k')
         ->assertSee('Excise KES 25 · Disputes KES 40');
-    Livewire::test(PlayerEngagementWidget::class)->assertSee('278');
     Livewire::test(TopCustomersWidget::class)->assertSee('Minks');
 });
 
@@ -393,7 +388,6 @@ it('keeps the finance widgets rendering when the API is down', function (): void
     Livewire::test(FinanceOverviewWidget::class)->assertOk();
     Livewire::test(PlatformPositionWidget::class)->assertOk();
     Livewire::test(ExciseDutyWidget::class)->assertOk()->assertSee('Excise Payable');
-    Livewire::test(PlayerEngagementWidget::class)->assertOk();
     Livewire::test(TopCustomersWidget::class)->assertOk()->assertSee('Top customers unavailable');
 });
 
@@ -405,13 +399,6 @@ function apiGoesDown(): void
     Http::swap(new Factory);
     Http::fake(['*' => Http::response(['message' => 'Internal server error'], 500)]);
 }
-
-it('renders the overall summary widget with dashes when the stats API fails', function (): void {
-    apiGoesDown();
-    $this->actingAs($this->admin);
-
-    Livewire::test(StatsOverview::class)->assertOk()->assertSee('Total Customers')->assertSee('—');
-});
 
 // --- Excise duty and disputes ---
 
