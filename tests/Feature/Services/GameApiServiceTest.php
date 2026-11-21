@@ -105,7 +105,7 @@ it('turns a 429 into a friendly rate limit exception', function () {
     Http::fake(['*' => Http::response(['message' => 'Too Many Attempts.'], 429, ['Retry-After' => '30'])]);
 
     try {
-        app(GameApiService::class)->getRetentionStats();
+        app(GameApiService::class)->listWithdrawals();
         $this->fail('Expected a GameApiException');
     } catch (GameApiException $e) {
         expect($e->statusCode)->toBe(429)
@@ -119,7 +119,7 @@ it('retries a GET once after a server error', function () {
         ->push(['message' => 'Internal server error'], 500)
         ->push(['data' => ['today' => 3]], 200);
 
-    expect(app(GameApiService::class)->getRetentionStats())->toBe(['today' => 3]);
+    expect(app(GameApiService::class)->listWithdrawals())->toBe(['data' => ['today' => 3]]);
     Http::assertSentCount(2);
 });
 

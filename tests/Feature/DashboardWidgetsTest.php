@@ -5,6 +5,7 @@ use App\Enums\HolderStatus;
 use App\Enums\UserStatus;
 use App\Enums\WithdrawStatus;
 use App\Enums\WithdrawType;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Widgets\ShareDistributionChartWidget;
 use App\Filament\Widgets\ShareholdersTableWidget;
 use App\Filament\Widgets\WithdrawalsThisMonthWidget;
@@ -97,39 +98,16 @@ it('restricts the shareholder widgets to admins while withdrawals stay visible t
         ->and(ShareDistributionChartWidget::canView())->toBeFalse();
 });
 
-it('orders dashboard widgets in contiguous groups of related widgets', function (): void {
-    $sorts = collect(glob(app_path('Filament/Widgets/*.php')))
+it('places every dashboard widget in exactly one dashboard section', function (): void {
+    $widgets = collect(glob(app_path('Filament/Widgets/*.php')))
         ->map(fn (string $file): string => 'App\\Filament\\Widgets\\'.basename($file, '.php'))
-        ->mapWithKeys(fn (string $class): array => [
-            class_basename($class) => (new ReflectionClass($class))->getProperty('sort')->getValue(),
-        ])
-        ->sort();
+        ->sort()
+        ->values();
 
-    expect($sorts->values()->duplicates())->toBeEmpty();
+    $placed = collect(Dashboard::SECTIONS)->flatten();
 
-    $groups = [
-        'activity' => ['PlayerRegistrationTrendWidget', 'AgentStatsWidget'],
-        'income' => ['FinanceOverviewWidget', 'StakesVersusPayoutsChartWidget', 'PurchasesStatsOverviewWidget'],
-        'cash' => ['MpesaBalanceStatsWidget', 'PlatformPositionWidget', 'UnmatchedDepositsWidget', 'ComplaintsStatsWidget', 'ExciseDutyWidget'],
-        'referrals' => ['ReferralProgrammeWidget', 'TopReferrersWidget', 'ReferralFinanceWidget', 'ReferralReconciliationWidget'],
-        'bet_shops' => ['BetShopsFinanceWidget', 'TopShopsByGgrWidget', 'ShopReconciliationWidget'],
-        'payouts' => ['WithdrawalsThisMonthWidget', 'ShareholdersTableWidget', 'ShareDistributionChartWidget'],
-        'players' => ['TopCustomersWidget'],
-    ];
-
-    $order = $sorts->keys()->values();
-    $lastIndexOfPreviousGroup = -1;
-
-    foreach ($groups as $members) {
-        $indexes = collect($members)->map(fn (string $widget): int => $order->search($widget))->sort()->values();
-
-        expect($indexes->first())->toBeGreaterThan($lastIndexOfPreviousGroup)
-            ->and($indexes->last() - $indexes->first())->toBe(count($members) - 1);
-
-        $lastIndexOfPreviousGroup = $indexes->last();
-    }
-
-    expect($order)->toHaveCount(collect($groups)->flatten()->count());
+    expect($placed->duplicates())->toBeEmpty()
+        ->and($placed->sort()->values()->all())->toBe($widgets->all());
 });
 
 it('keeps every dashboard widget within the two column grid', function (): void {

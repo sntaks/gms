@@ -3,15 +3,12 @@
 namespace App\Filament\Pages;
 
 use App\Concerns\HasStatsFilters;
-use App\Filament\Widgets\AgentStatsWidget;
 use App\Filament\Widgets\BetShopsFinanceWidget;
 use App\Filament\Widgets\ComplaintsStatsWidget;
 use App\Filament\Widgets\ExciseDutyWidget;
 use App\Filament\Widgets\FinanceOverviewWidget;
 use App\Filament\Widgets\MpesaBalanceStatsWidget;
 use App\Filament\Widgets\PlatformPositionWidget;
-use App\Filament\Widgets\PlayerRegistrationTrendWidget;
-use App\Filament\Widgets\PurchasesStatsOverviewWidget;
 use App\Filament\Widgets\ReferralFinanceWidget;
 use App\Filament\Widgets\ReferralProgrammeWidget;
 use App\Filament\Widgets\ReferralReconciliationWidget;
@@ -73,8 +70,8 @@ class Dashboard extends BaseDashboard
      * @var array<string, list<class-string>>
      */
     public const SECTIONS = [
-        'Players' => [PlayerRegistrationTrendWidget::class, AgentStatsWidget::class, TopCustomersWidget::class],
-        'Income' => [FinanceOverviewWidget::class, StakesVersusPayoutsChartWidget::class, PurchasesStatsOverviewWidget::class],
+        'Players' => [TopCustomersWidget::class],
+        'Income' => [FinanceOverviewWidget::class, StakesVersusPayoutsChartWidget::class],
         'Cash and attention' => [MpesaBalanceStatsWidget::class, PlatformPositionWidget::class, UnmatchedDepositsWidget::class, ComplaintsStatsWidget::class, ExciseDutyWidget::class],
         'Referrals' => [ReferralProgrammeWidget::class, TopReferrersWidget::class, ReferralFinanceWidget::class, ReferralReconciliationWidget::class],
         'Bet shops' => [BetShopsFinanceWidget::class, TopShopsByGgrWidget::class, ShopReconciliationWidget::class],
