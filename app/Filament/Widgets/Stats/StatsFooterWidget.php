@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets\Stats;
 
+use App\Filament\Pages\Statistics\StatsLiabilityPage;
 use App\Filament\Widgets\Stats\Concerns\ReadsDashboardStats;
 use Filament\Widgets\Widget;
 
@@ -21,6 +22,24 @@ class StatsFooterWidget extends Widget
     protected int|string|array $columnSpan = 'full';
 
     protected string $view = 'filament.widgets.stats.footer';
+
+    /**
+     * The answer whose warnings and build time are shown; each statistics page sets its own.
+     */
+    public string $report = 'dashboard';
+
+    /**
+     * Liability is shown to the trading roles too, so its footer follows that page's gate.
+     */
+    public static function canView(): bool
+    {
+        return auth()->user()?->canViewFinanceReports() || StatsLiabilityPage::canAccess();
+    }
+
+    protected function statsReportKey(): string
+    {
+        return $this->report;
+    }
 
     /**
      * @return array<string, mixed>

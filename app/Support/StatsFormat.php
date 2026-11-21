@@ -41,9 +41,12 @@ class StatsFormat
         'open_potential_payout' => 'What open wagers could pay now: worst side for prediction markets, as reported by the game otherwise.',
     ];
 
+    /**
+     * KES with two decimals, shortened from a thousand: `KES 534.10`, `KES 12.66K`, `KES 1.85M`.
+     */
     public static function money(int|float|string|null $amount): string
     {
-        return $amount === null || $amount === '' ? 'n/a' : Format::money($amount);
+        return $amount === null || $amount === '' ? 'n/a' : 'KES '.self::short((float) $amount, 2);
     }
 
     public static function percent(int|float|string|null $value): string
@@ -51,9 +54,45 @@ class StatsFormat
         return $value === null || $value === '' ? 'n/a' : number_format((float) $value, 2).'%';
     }
 
+    /**
+     * A whole count, shortened from a thousand: `950`, `1.25K`, `3.40M`.
+     */
     public static function count(int|float|string|null $value): string
     {
-        return $value === null || $value === '' ? 'n/a' : number_format((float) $value);
+        return $value === null || $value === '' ? 'n/a' : self::short((float) $value, 0);
+    }
+
+    /**
+     * Two decimals with K for thousands and M for millions; below a thousand, `$decimals` places.
+     */
+    public static function short(float $value, int $decimals): string
+    {
+        $magnitude = abs($value);
+
+        return match (true) {
+            round($magnitude, 2) >= 999_995 => number_format($value / 1_000_000, 2).'M',
+            round($magnitude, 2) >= 1_000 => number_format($value / 1_000, 2).'K',
+            default => number_format($value, $decimals),
+        };
+    }
+
+    /**
+     * A duration from the API's seconds: `45s`, `3m 05s`, `2h 10m`, `1d 4h`.
+     */
+    public static function duration(int|float|string|null $seconds): string
+    {
+        if ($seconds === null || $seconds === '') {
+            return 'n/a';
+        }
+
+        $seconds = (int) round((float) $seconds);
+
+        return match (true) {
+            $seconds < 60 => $seconds.'s',
+            $seconds < 3_600 => intdiv($seconds, 60).'m '.str_pad((string) ($seconds % 60), 2, '0', STR_PAD_LEFT).'s',
+            $seconds < 86_400 => intdiv($seconds, 3_600).'h '.str_pad((string) intdiv($seconds % 3_600, 60), 2, '0', STR_PAD_LEFT).'m',
+            default => intdiv($seconds, 86_400).'d '.intdiv($seconds % 86_400, 3_600).'h',
+        };
     }
 
     /**
