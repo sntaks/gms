@@ -56,7 +56,9 @@ use Livewire\Attributes\On;
  */
 class Dashboard extends BaseDashboard
 {
-    use HasFiltersForm;
+    use HasFiltersForm {
+        mountHasFilters as mountFiltersFromQueryOrSession;
+    }
 
     /**
      * The statistics section, in grid order, all reading the same `/stats/dashboard` answer.
@@ -92,6 +94,19 @@ class Dashboard extends BaseDashboard
     public static function canViewStats(): bool
     {
         return auth()->user()?->canViewFinanceReports() ?? false;
+    }
+
+    /**
+     * A shared link may carry only some filters; the missing ones take their defaults (test players
+     * left out) instead of an empty form state.
+     */
+    public function mountHasFilters(): void
+    {
+        if (filled($this->filters)) {
+            $this->filters = [...StatsFilters::defaults(), ...$this->filters];
+        }
+
+        $this->mountFiltersFromQueryOrSession();
     }
 
     public function filtersForm(Schema $schema): Schema

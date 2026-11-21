@@ -181,6 +181,16 @@ it('filters the dashboard by the game a row is clicked on', function (): void {
         ->assertSet('filters.product', null);
 });
 
+it('keeps test players out when a shared link leaves that filter out', function (): void {
+    signInWithRole('finance');
+    fakeStatsDashboard();
+
+    Livewire::withQueryParams(['filters' => ['period' => '7d']])
+        ->test(Dashboard::class)
+        ->assertSet('filters.period', '7d')
+        ->assertSet('filters.exclude_test', true);
+});
+
 it('shows the warnings and when the figures were built, in Nairobi time', function (): void {
     signInWithRole('finance');
     fakeStatsDashboard();
