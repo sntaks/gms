@@ -6,6 +6,7 @@ use App\Http\Controllers\C2BBalanceResultController;
 use App\Http\Controllers\C2BBalanceTimeoutController;
 use App\Http\Controllers\FinanceExportController;
 use App\Http\Controllers\MpesaB2CResultController;
+use App\Http\Controllers\StatsExportController;
 use App\Models\User;
 use Filament\Http\Middleware\Authenticate;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +21,10 @@ Route::post('/c2b/balance/timeout', C2BBalanceTimeoutController::class);
 Route::get('/finance/export/{report}', FinanceExportController::class)
     ->middleware(Authenticate::class)
     ->name('finance.export');
+
+Route::get('/stats/export/{report}', StatsExportController::class)
+    ->middleware(Authenticate::class)
+    ->name('stats.export');
 
 Route::get('/email/preview/{type}', function (string $type) {
     $user = auth()->user() ?? User::first();

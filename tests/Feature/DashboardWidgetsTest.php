@@ -108,8 +108,8 @@ it('orders dashboard widgets in contiguous groups of related widgets', function 
     expect($sorts->values()->duplicates())->toBeEmpty();
 
     $groups = [
-        'activity' => ['StatsOverview', 'GameStatsWidget', 'PlayerEngagementWidget', 'PlayerRegistrationTrendWidget', 'AgentStatsWidget'],
-        'income' => ['IncomeStatsOverviewWidget', 'FinanceOverviewWidget', 'RevenueChartWidget', 'StakesVersusPayoutsChartWidget', 'PurchasesStatsOverviewWidget'],
+        'activity' => ['PlayerRegistrationTrendWidget', 'AgentStatsWidget'],
+        'income' => ['FinanceOverviewWidget', 'StakesVersusPayoutsChartWidget', 'PurchasesStatsOverviewWidget'],
         'cash' => ['MpesaBalanceStatsWidget', 'PlatformPositionWidget', 'UnmatchedDepositsWidget', 'ComplaintsStatsWidget', 'ExciseDutyWidget'],
         'referrals' => ['ReferralProgrammeWidget', 'TopReferrersWidget', 'ReferralFinanceWidget', 'ReferralReconciliationWidget'],
         'bet_shops' => ['BetShopsFinanceWidget', 'TopShopsByGgrWidget', 'ShopReconciliationWidget'],

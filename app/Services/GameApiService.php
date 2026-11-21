@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\GameApiException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\RequestException;
@@ -1036,6 +1037,89 @@ class GameApiService
         Cache::forever(self::FINANCE_CACHE_VERSION_KEY, (int) Cache::get(self::FINANCE_CACHE_VERSION_KEY, 0) + 1);
     }
 
+    // -------------------------------------------------------------------------
+    // Statistics — GET /stats/{dashboard,games,liability,players,…} (read-only, `stats-dashboard` limiter: 60/min)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Statistics the API can export as CSV via GET /stats/export/{report}.
+     *
+     * @var list<string>
+     */
+    public const STATS_EXPORTS = ['stats-games', 'stats-players-top', 'stats-promotions', 'stats-payments'];
+
+    /**
+     * KadiApi rebuilds today's figures at most once a minute, so an answer is never kept longer.
+     */
+    public const STATS_MAX_CACHE_SECONDS = 60;
+
+    /**
+     * Fetch one statistics answer (`/stats/{report}`) and return its `data` payload.
+     *
+     * Filters: period or from/to, compare, group_by, exclude_test, game, product, plus report-specific ones
+     * (sort, limit). The answer is cached for at most a minute, and widgets asking at the same moment wait
+     * for one another so a dashboard load makes a single call.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     *
+     * @throws GameApiException 422 with `errors` (e.g. a product outside the game, `product_filter_not_supported`)
+     */
+    public function statsReport(string $report, array $filters = [], int $cacheSeconds = self::STATS_MAX_CACHE_SECONDS): array
+    {
+        $path = '/stats/'.ltrim($report, '/');
+        $query = $this->statsQuery($filters);
+
+        $fetch = fn (): array => $this->makeRequest('GET', $path, query: $query, timeout: 45)['data'] ?? [];
+
+        if ($cacheSeconds <= 0) {
+            return $fetch();
+        }
+
+        $key = 'game_api:stats:'.md5($path.json_encode($query));
+        $seconds = min($cacheSeconds, self::STATS_MAX_CACHE_SECONDS);
+
+        if (($cached = Cache::get($key)) !== null) {
+            return $cached;
+        }
+
+        try {
+            return Cache::lock($key.':lock', 50)->block(50, fn (): array => Cache::remember($key, $seconds, $fetch));
+        } catch (LockTimeoutException) {
+            return Cache::remember($key, $seconds, $fetch);
+        }
+    }
+
+    /**
+     * Stream a statistics CSV (`/stats/export/{report}`) with the page's own query.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{body: string, filename: string}
+     *
+     * @throws GameApiException
+     */
+    public function downloadStatsCsv(string $report, array $filters = []): array
+    {
+        if (! in_array($report, self::STATS_EXPORTS, true)) {
+            throw new GameApiException("Unsupported statistics export: {$report}", 422, 'Unsupported export');
+        }
+
+        return $this->downloadCsv('/stats/export/'.$report, $this->statsQuery($filters), $report.'-'.($filters['from'] ?? $filters['period'] ?? 'period').'.csv');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    protected function statsQuery(array $filters): array
+    {
+        return collect($filters)
+            ->reject(fn ($value): bool => $value === null || $value === '')
+            ->map(fn ($value) => is_bool($value) ? (int) $value : $value)
+            ->sortKeys()
+            ->all();
+    }
+
     /**
      * Record a payment of excise duty to KRA. The API attaches every unremitted charge in the
      * period, so they can no longer be refunded.
@@ -1245,11 +1329,24 @@ class GameApiService
             ->map(fn ($value) => is_bool($value) ? (int) $value : $value)
             ->all();
 
+        return $this->downloadCsv("/finance/export/{$report}", $query, 'finance-'.$report.'-'.($filters['from'] ?? 'start').'-'.($filters['to'] ?? 'today').'.csv');
+    }
+
+    /**
+     * Fetch a CSV server-side so the API key never reaches the browser. The API's own file name wins.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array{body: string, filename: string}
+     *
+     * @throws GameApiException
+     */
+    protected function downloadCsv(string $path, array $query, string $filename): array
+    {
         try {
             $response = Http::withHeaders(['X-API-KEY' => $this->apiKey, 'Accept' => 'text/csv'])
                 ->timeout(60)
                 ->connectTimeout(5)
-                ->get("{$this->baseUrl}/finance/export/{$report}", $query ?: null);
+                ->get($this->baseUrl.$path, $query ?: null);
         } catch (ConnectionException $e) {
             throw new GameApiException('Game API is unreachable. Please try again later.', 0, $e->getMessage());
         }
@@ -1261,8 +1358,6 @@ class GameApiService
 
             throw new GameApiException("Game API error {$response->status()}: {$message}", $response->status(), $message);
         }
-
-        $filename = 'finance-'.$report.'-'.($filters['from'] ?? 'start').'-'.($filters['to'] ?? 'today').'.csv';
 
         if (preg_match('/filename="?([^";]+)"?/i', $response->header('Content-Disposition'), $matches) === 1) {
             $filename = basename($matches[1]);
