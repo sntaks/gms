@@ -436,27 +436,6 @@ class GameApiService
     }
 
     /**
-     * TASK-018: Fetch player retention stats.
-     * Endpoint: GET /api/v1/stats/retention
-     */
-    public function getRetentionStats(): array
-    {
-        return $this->makeRequest('GET', '/stats/retention')['data'] ?? [];
-    }
-
-    /**
-     * Fetch daily income stats for the last 30 days.
-     * Endpoint: GET /api/v1/stats/income/daily-30-days
-     * Returns: { start_date, end_date, daily_stats: { "YYYY-MM-DD": { single_games, tournaments, jackpots, total } } }
-     *
-     * Subject to the `stats` limiter (20/min), so callers should cache.
-     */
-    public function getDailyIncome(): array
-    {
-        return $this->makeRequest('GET', '/stats/income/daily-30-days')['data'] ?? [];
-    }
-
-    /**
      * Fetch current business day's cumulative income.
      * Endpoint: GET /api/v1/stats/income
      * Returns: { success: true, data: { total_income, games: {total, 2_players, …},
