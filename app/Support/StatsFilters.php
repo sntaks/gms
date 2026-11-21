@@ -39,11 +39,67 @@ class StatsFilters
     ];
 
     /**
-     * @return array{period: string, from: ?string, to: ?string, compare: string, game: ?string, product: ?string, exclude_test: bool}
+     * Which filters each statistics answer takes. Liability is "now", so it has no period; payments are
+     * platform-wide (a game or product is refused); top players adds a sort and a limit.
+     *
+     * @var array<string, array{period: bool, compare: bool, product: bool, ranking: bool}>
+     */
+    public const REPORTS = [
+        'dashboard' => ['period' => true, 'compare' => true, 'product' => true, 'ranking' => false],
+        'games' => ['period' => true, 'compare' => false, 'product' => true, 'ranking' => false],
+        'liability' => ['period' => false, 'compare' => false, 'product' => true, 'ranking' => false],
+        'players' => ['period' => true, 'compare' => false, 'product' => true, 'ranking' => false],
+        'players/top' => ['period' => true, 'compare' => false, 'product' => true, 'ranking' => true],
+        'promotions' => ['period' => true, 'compare' => false, 'product' => true, 'ranking' => false],
+        'payments' => ['period' => true, 'compare' => false, 'product' => false, 'ranking' => false],
+    ];
+
+    /**
+     * @var array<string, string>
+     */
+    public const SORTS = [
+        'turnover' => 'Turnover',
+        'ggr' => 'GGR',
+        'deposits' => 'Deposits',
+        'net_loss' => 'Net loss',
+        'wins' => 'Wins',
+    ];
+
+    /**
+     * @var list<int>
+     */
+    public const LIMITS = [20, 50, 100];
+
+    /**
+     * @return array{period: string, from: ?string, to: ?string, compare: string, game: ?string, product: ?string, exclude_test: bool, sort: string, limit: int}
      */
     public static function defaults(): array
     {
-        return ['period' => 'today', 'from' => null, 'to' => null, 'compare' => 'previous_period', 'game' => null, 'product' => null, 'exclude_test' => true];
+        return ['period' => 'today', 'from' => null, 'to' => null, 'compare' => 'previous_period', 'game' => null, 'product' => null, 'exclude_test' => true, 'sort' => 'turnover', 'limit' => 20];
+    }
+
+    /**
+     * The query for one statistics answer, sending only the filters that answer takes.
+     *
+     * @param  array<string, mixed>|null  $filters
+     * @return array<string, mixed>
+     */
+    public static function queryFor(string $report, ?array $filters): array
+    {
+        $takes = self::REPORTS[$report] ?? self::REPORTS['dashboard'];
+        $query = self::query($filters, withCompare: $takes['compare'], withProduct: $takes['product']);
+
+        if (! $takes['period']) {
+            $query = array_diff_key($query, array_flip(['period', 'from', 'to', 'group_by']));
+        }
+
+        if ($takes['ranking']) {
+            $filters = [...self::defaults(), ...array_filter($filters ?? [], fn ($value): bool => $value !== null && $value !== '')];
+            $query['sort'] = array_key_exists((string) $filters['sort'], self::SORTS) ? $filters['sort'] : 'turnover';
+            $query['limit'] = in_array((int) $filters['limit'], self::LIMITS, true) ? (int) $filters['limit'] : 20;
+        }
+
+        return $query;
     }
 
     /**

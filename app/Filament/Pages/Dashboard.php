@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Concerns\HasStatsFilters;
 use App\Filament\Widgets\AgentStatsWidget;
 use App\Filament\Widgets\BetShopsFinanceWidget;
 use App\Filament\Widgets\ComplaintsStatsWidget;
@@ -31,21 +32,12 @@ use App\Filament\Widgets\TopReferrersWidget;
 use App\Filament\Widgets\TopShopsByGgrWidget;
 use App\Filament\Widgets\UnmatchedDepositsWidget;
 use App\Filament\Widgets\WithdrawalsThisMonthWidget;
-use App\Services\GameApiService;
-use App\Support\StatsFilters;
 use Filament\Actions\Action;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
 use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Support\Enums\Width;
 use Illuminate\Support\Str;
 use Livewire\Attributes\On;
 
@@ -56,9 +48,7 @@ use Livewire\Attributes\On;
  */
 class Dashboard extends BaseDashboard
 {
-    use HasFiltersForm {
-        mountHasFilters as mountFiltersFromQueryOrSession;
-    }
+    use HasStatsFilters;
 
     /**
      * The statistics section, in grid order, all reading the same `/stats/dashboard` answer.
@@ -96,59 +86,17 @@ class Dashboard extends BaseDashboard
         return auth()->user()?->canViewFinanceReports() ?? false;
     }
 
-    /**
-     * A shared link may carry only some filters; the missing ones take their defaults (test players
-     * left out) instead of an empty form state.
-     */
-    public function mountHasFilters(): void
+    public static function statsReport(): string
     {
-        if (filled($this->filters)) {
-            $this->filters = [...StatsFilters::defaults(), ...$this->filters];
-        }
-
-        $this->mountFiltersFromQueryOrSession();
+        return 'dashboard';
     }
 
-    public function filtersForm(Schema $schema): Schema
+    /**
+     * The dashboard has no CSV of its own; the per-product figures (`stats-games`) cover the same query.
+     */
+    public static function statsExport(): ?string
     {
-        return $schema->components([
-            Select::make('period')
-                ->label('Period')
-                ->options(StatsFilters::PERIODS)
-                ->default('today')
-                ->selectablePlaceholder(false)
-                ->live(),
-            DatePicker::make('from')
-                ->label('From')
-                ->native(false)
-                ->maxDate(today())
-                ->visible(fn (Get $get): bool => $get('period') === 'custom'),
-            DatePicker::make('to')
-                ->label('Until')
-                ->native(false)
-                ->maxDate(today())
-                ->afterOrEqual('from')
-                ->visible(fn (Get $get): bool => $get('period') === 'custom'),
-            Select::make('compare')
-                ->label('Compared with')
-                ->options(StatsFilters::COMPARES)
-                ->default('previous_period')
-                ->selectablePlaceholder(false),
-            Select::make('game')
-                ->label('Game')
-                ->placeholder('All games')
-                ->options(fn (): array => StatsFilters::gameOptions())
-                ->live()
-                ->afterStateUpdated(fn (Set $set) => $set('product', null)),
-            Select::make('product')
-                ->label('Product')
-                ->placeholder('All products')
-                ->options(fn (Get $get): array => StatsFilters::productOptions($get('game') ?: null)),
-            Toggle::make('exclude_test')
-                ->label('Leave out test players')
-                ->default(true)
-                ->inline(false),
-        ]);
+        return 'stats-games';
     }
 
     /**
@@ -196,38 +144,6 @@ class Dashboard extends BaseDashboard
      */
     protected function getHeaderActions(): array
     {
-        return [
-            Action::make('definitions')
-                ->label('Definitions')
-                ->icon('heroicon-o-information-circle')
-                ->color('gray')
-                ->visible(fn (): bool => static::canViewStats())
-                ->modalHeading('How these figures are defined')
-                ->modalWidth(Width::TwoExtraLarge)
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Close')
-                ->modalContent(fn () => view('filament.pages.partials.stats-notes', ['notes' => $this->notes()])),
-            Action::make('exportCsv')
-                ->label('Export CSV')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('gray')
-                ->visible(fn (): bool => static::canViewStats())
-                ->tooltip('Per-product figures for this period and filter (stats-games)')
-                ->url(fn (): string => route('stats.export', ['report' => 'stats-games', ...StatsFilters::query($this->filters, withCompare: false)])),
-        ];
-    }
-
-    /**
-     * @return list<string>
-     */
-    protected function notes(): array
-    {
-        try {
-            $notes = app(GameApiService::class)->statsReport('dashboard', StatsFilters::query($this->filters))['notes'] ?? [];
-        } catch (\Throwable) {
-            $notes = [];
-        }
-
-        return array_values(array_filter((array) $notes, 'is_string'));
+        return static::canViewStats() ? $this->statsHeaderActions() : [];
     }
 }

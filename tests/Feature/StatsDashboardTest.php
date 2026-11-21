@@ -8,6 +8,7 @@ use App\Filament\Widgets\Stats\StatsKpiWidget;
 use App\Filament\Widgets\Stats\StatsRevenueChartWidget;
 use App\Services\GameApiService;
 use App\Support\StatsFilters;
+use App\Support\StatsFormat;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -88,6 +89,18 @@ function statsDashboardRequests(): int
     return Http::recorded(fn (Request $request): bool => str_contains($request->url(), '/stats/dashboard'))->count();
 }
 
+it('shortens amounts and counts to K and M with two decimals', function (): void {
+    expect(StatsFormat::money(534.1))->toBe('KES 534.10')
+        ->and(StatsFormat::money(12659.54))->toBe('KES 12.66K')
+        ->and(StatsFormat::money(999.999))->toBe('KES 1.00K')
+        ->and(StatsFormat::money(1850000))->toBe('KES 1.85M')
+        ->and(StatsFormat::money(-12000))->toBe('KES -12.00K')
+        ->and(StatsFormat::money(null))->toBe('n/a')
+        ->and(StatsFormat::count(950))->toBe('950')
+        ->and(StatsFormat::count(1250))->toBe('1.25K')
+        ->and(StatsFormat::duration(185))->toBe('3m 05s');
+});
+
 it('asks KadiApi for the chosen period, comparison and filters', function (): void {
     expect(StatsFilters::query(['period' => '7d', 'compare' => 'same_period_last_year', 'game' => 'slots', 'exclude_test' => false]))
         ->toBe(['period' => '7d', 'group_by' => 'day', 'exclude_test' => false, 'compare' => 'same_period_last_year', 'game' => 'slots'])
@@ -130,8 +143,8 @@ it('shows each headline figure with its change, and a dash when there is nothing
     fakeStatsDashboard();
 
     Livewire::test(StatsKpiWidget::class, ['pageFilters' => ['period' => 'today']])
-        ->assertSee('KES 12,500.00')
-        ->assertSee('+25.00% vs KES 10,000.00')
+        ->assertSee('KES 12.50K')
+        ->assertSee('+25.00% vs KES 10.00K')
         ->assertSee('25.00%')
         ->assertSee('New players')
         ->assertSee('– vs 0');
@@ -146,7 +159,7 @@ it('hides the cash and sign-up cards when the API sends them as null under a gam
     ]]);
 
     Livewire::test(StatsKpiWidget::class, ['pageFilters' => ['period' => 'today', 'game' => 'slots']])
-        ->assertSee('KES 8,000.00')
+        ->assertSee('KES 8.00K')
         ->assertDontSee('Deposits')
         ->assertDontSee('New players')
         ->assertDontSee('Net cash');
@@ -160,7 +173,7 @@ it('shows n/a for the payouts and RTP of a Kadi rake product', function (): void
 
     Livewire::test(StatsByProductWidget::class, ['pageFilters' => ['period' => 'today']])
         ->assertSee('Kadi singles')
-        ->assertSee('KES 4,500.00')
+        ->assertSee('KES 4.50K')
         ->assertSee('n/a');
 });
 
